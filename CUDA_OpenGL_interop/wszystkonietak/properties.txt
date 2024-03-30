@@ -1,0 +1,6 @@
+project name: wszystkonietak
+width: 800
+height: 800
+fullscreen: false
+background color: 0.3, 0.4, 0.5
+frame rate limit: 60

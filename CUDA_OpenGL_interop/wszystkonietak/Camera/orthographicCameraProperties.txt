@@ -1,0 +1,4 @@
+min_zoom: 0.0
+max_zoom: 0.99
+far_speed: 0.1
+close_speed: 0.00001

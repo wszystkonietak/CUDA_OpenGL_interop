@@ -55,6 +55,8 @@ project (main_prj_name)
 		"%{prj.name}/src/**.cpp",
 		"%{prj.name}/src/**.txt",
 		"%{prj.name}/src/**.h",
+		"%{prj.name}/src/**.hpp",
+		"%{prj.name}/src/**.cuh",
 	}
 
 	includedirs

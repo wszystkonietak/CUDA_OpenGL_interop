@@ -1,0 +1,7 @@
+left: 0.0f
+right: 1.0f
+bottom: 0.0f
+top: 1.0f
+near: -1.0f
+far: 1.0f
+position: 0.0f, 0.0f, 0.0f
