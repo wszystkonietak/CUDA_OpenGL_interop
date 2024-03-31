@@ -49,8 +49,8 @@ struct ConstantsCellColide {
 
 class CollisionDetection {
 public:
+	CollisionDetection() = default;
 	CollisionDetection(float width, float height, unsigned int size, float radius, Particle* d_particles);
-	CollisionDetection() {};
 	//methods
 	void setup(float scene_width, float scene_height, unsigned int size, float radius, Particle* d_particles);
 	void check_collision();

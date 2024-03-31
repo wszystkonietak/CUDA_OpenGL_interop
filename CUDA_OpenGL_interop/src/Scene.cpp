@@ -8,11 +8,11 @@ Scene::Scene(std::vector<SoftBody> softBodies, std::vector<Shader> shaders)
 
 void Scene::load(const std::string& project_path)
 {
-	std::string scene_path = project_path + "/Scene";
+	scene_path = project_path + "/Scene";
 	
-	loadSoftBodies(scene_path);
-	
-	loadShaders(scene_path);
+	loadSoftBodies();
+	loadParticles();
+	loadShaders();
 }
 
 void Scene::updateShaders(OrthographicCamera& camera)
@@ -21,24 +21,28 @@ void Scene::updateShaders(OrthographicCamera& camera)
 	shaders[s_Basic].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
 	shaders[s_SoftBody].use();
 	shaders[s_SoftBody].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
+	shaders[s_SoftBody].use();
+	shaders[s_SoftBody].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
 }
 
 void Scene::updateMeshes()
 {
 	processInput();
 	simulateMeshes();
-
 }
 
 void Scene::render()
 {
 	shaders[s_Basic].use();
-	for (auto& softBody : softBodies) {
+	/*for (auto& softBody : softBodies) {
 		softBody.draw(shaders[s_SoftBody], points);
+	}*/
+	for (auto& particleSystem : particles) {
+		particleSystem.draw(shaders[s_Particles]);
 	}
 }
 
-void Scene::setCameraZoom(const OrthographicCamera& camera)
+void Scene::setCameraZoom(const OrthographicCamera& camera, FrameHandler& input)
 {
 	shaders[s_Basic].use();
 	shaders[s_Basic].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
@@ -48,6 +52,13 @@ void Scene::setCameraZoom(const OrthographicCamera& camera)
 	shaders[s_SoftBody].use();
 	shaders[s_SoftBody].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
 	shaders[s_SoftBody].setFloat("u_inPixelDiameter", inPixelDiameter);
+
+	shaders[s_Particles].use();
+	shaders[s_Particles].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
+	float inPixelRadius = particles[0].particle_radius * (input.properties.scr_width / camera.getFrustum().y);
+	inPixelDiameter = 2 * inPixelRadius;
+	shaders[s_Particles].setFloat("u_inPixelRadius", inPixelRadius);
+	shaders[s_Particles].setFloat("u_inPixelDiameter", inPixelDiameter);
 }
 
 void Scene::setCameraProjection(const OrthographicCamera& camera)
@@ -57,6 +68,9 @@ void Scene::setCameraProjection(const OrthographicCamera& camera)
 
 	shaders[s_SoftBody].use();
 	shaders[s_SoftBody].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
+
+	shaders[s_Particles].use();
+	shaders[s_Particles].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
 }
 
 void Scene::processInput()
@@ -73,11 +87,14 @@ void Scene::simulateMeshes()
 	for (auto& softBody : softBodies) {
 		softBody.simulate();
 	}
+	for (auto& particleSystem : particles) {
+		particleSystem.update();
+	}
 }
 
-void Scene::loadSoftBodies(const std::string& project_path)
+void Scene::loadSoftBodies()
 {
-	std::vector<std::string> lines = loadFile(project_path + "/softBodies.txt");
+	std::vector<std::string> lines = loadFile(scene_path + "/softBodies.txt");
 	lines.erase(lines.begin());
 	for (auto& line : lines) {
 		std::vector<std::string> numbers = split(line, ", ");
@@ -93,9 +110,26 @@ void Scene::loadSoftBodies(const std::string& project_path)
 	}
 }
 
-void Scene::loadShaders(const std::string& project_path)
+void Scene::loadParticles()
 {
-	std::string shaderFolderPath = project_path + "/Shaders/";
+	std::vector<std::string> lines = loadFile(scene_path + "/particles.txt");
+	lines.erase(lines.begin());
+	for (auto& line : lines) {
+		std::vector<std::string> numbers = split(line, ", ");
+		if (numbers.size()) {
+			float_t scene_width = std::stof(numbers[0]);
+			float_t scene_height = std::stof(numbers[1]);
+			float_t particle_radius = std::stof(numbers[2]);
+			int num_particles = std::stoi(numbers[3]);
+
+			particles.push_back(ParticleSystem(scene_width, scene_height, particle_radius, num_particles));
+		}
+	}
+}
+
+void Scene::loadShaders()
+{
+	std::string shaderFolderPath = scene_path + "/Shaders/";
 	std::vector<std::string> lines = loadFile(shaderFolderPath + "shaders.txt");
 	for (auto& line : lines) {
 		std::ifstream file(line + ".geom");

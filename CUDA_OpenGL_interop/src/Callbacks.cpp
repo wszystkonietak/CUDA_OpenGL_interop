@@ -14,17 +14,17 @@ Callbacks::Callbacks(Project& project) : project(project), input(project.propert
 	setInputResponse(MouseHandler(Scroll(scroll_up)), [&project](FrameHandler& input) 
 	{
 		project.camera.zoomIn(input); 
-		project.scene.setCameraZoom(project.camera);
+		project.scene.setCameraZoom(project.camera, input);
 	});
 	setInputResponse(MouseHandler(Scroll(scroll_down)), [&project](FrameHandler& input)
 	{
-	project.camera.zoomOut(input); 
-	project.scene.setCameraZoom(project.camera);
+		project.camera.zoomOut(input); 
+		project.scene.setCameraZoom(project.camera, input);
 	});
 	setInputResponse(MouseHandler(Buttons(left_button, held), Cursor(is_moving)), [&project](FrameHandler& input)
 	{
-	project.camera.updatePosition(input);
-	project.scene.setCameraProjection(project.camera); 
+		project.camera.updatePosition(input);
+		project.scene.setCameraProjection(project.camera); 
 	});
 }
 

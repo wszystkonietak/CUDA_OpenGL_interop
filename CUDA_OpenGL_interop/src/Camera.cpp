@@ -114,9 +114,6 @@ void OrthographicCamera::zoomOut(FrameHandler& input)
 
 void OrthographicCamera::updatePosition(FrameHandler& input)
 {
-	if (position.x == 0 && position.y == 0) {
-		int a = 2;
-	}
 	position.x -= input.mouse.cursor.delta.x * frustum_size;
 	position.y -= input.mouse.cursor.delta.y * frustum_size;
 	if (position.x < 0.0f) 

@@ -9,11 +9,18 @@
 enum {
 	s_Basic = 0,
 	s_SoftBody = 1,
+	s_Particles = 2,
 	triangles = GL_TRIANGLES,
 	points = GL_POINTS,
 	lines = GL_LINES,
 	line_strip = GL_LINE_STRIP,
 	line_loop = GL_LINE_LOOP,
+};
+
+
+struct Particle {
+	float2 position;
+	float2 velocity;
 };
 
 struct Texture {

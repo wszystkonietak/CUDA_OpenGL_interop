@@ -62,7 +62,6 @@ struct Buttons {
 			pressed_count--;
 		//pressed_count += action == press ? 1 : -1;
 		id = ((button << 1) | action) << 2;
-		printf("%i\n", pressed_count);
 	}
 	int id;
 	int last_pressed_id;

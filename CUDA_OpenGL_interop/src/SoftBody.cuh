@@ -27,7 +27,6 @@ public:
 	}
 	void init(glm::vec2 start = glm::vec2(0, 0));
 	void simulate();
-	void update_sticked_particle_id();
 	glm::uvec2 dim;
 	glm::vec2 size;
 	float_t particle_radius;

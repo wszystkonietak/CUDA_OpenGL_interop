@@ -156,7 +156,7 @@ void SoftBody::simulate()
 	//cudaDeviceSynchronize();
 	//printa << <1, 1 >> > (5);
 	float2 deltaPosition, relativeVelocity, a, b, force, normalizedDelta;
-	std::vector<float2> forces(100, make_float2(0, 0));
+	std::vector<float2> forces(vertices.size(), make_float2(0, 0));
 	for (auto& spring : springs) {
 		Vertex* A = &vertices[spring.indices.x];
 		Vertex* B = &vertices[spring.indices.y];
