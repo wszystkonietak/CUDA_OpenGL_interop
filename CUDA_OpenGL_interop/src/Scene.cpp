@@ -13,6 +13,7 @@ void Scene::load(const std::string& project_path)
 	loadSoftBodies();
 	loadParticles();
 	loadShaders();
+	loadCanvases();
 }
 
 void Scene::updateShaders(OrthographicCamera& camera)
@@ -27,18 +28,25 @@ void Scene::updateShaders(OrthographicCamera& camera)
 
 void Scene::updateMeshes()
 {
-	processInput();
-	simulateMeshes();
+	for (auto& softBody : softBodies) {
+		softBody.simulate();
+	}
+	for (auto& particleSystem : particles) {
+		particleSystem.update();
+	}
 }
 
 void Scene::render()
 {
 	shaders[s_Basic].use();
-	/*for (auto& softBody : softBodies) {
+	for (auto& softBody : softBodies) {
 		softBody.draw(shaders[s_SoftBody], points);
-	}*/
+	}
 	for (auto& particleSystem : particles) {
 		particleSystem.draw(shaders[s_Particles]);
+	}
+	for (auto& canvas : canvases) {
+		canvas.draw();
 	}
 }
 
@@ -46,19 +54,27 @@ void Scene::setCameraZoom(const OrthographicCamera& camera, FrameHandler& input)
 {
 	shaders[s_Basic].use();
 	shaders[s_Basic].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
-	float inPixelDiameter = 2* softBodies[0].particle_radius * camera.getFrustumRatio();
-	shaders[s_Basic].setFloat("u_inPixelDiameter", inPixelDiameter);
+	float inPixelDiameter = 0;
+	if (softBodies.size() > 0) {
+		inPixelDiameter = 2* softBodies[0].particle_radius * camera.getFrustumRatio();
+		shaders[s_Basic].setFloat("u_inPixelDiameter", inPixelDiameter);
+	}
 
 	shaders[s_SoftBody].use();
 	shaders[s_SoftBody].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
-	shaders[s_SoftBody].setFloat("u_inPixelDiameter", inPixelDiameter);
+	if (softBodies.size() > 0) {
+		shaders[s_SoftBody].setFloat("u_inPixelDiameter", inPixelDiameter);
+	}
 
 	shaders[s_Particles].use();
 	shaders[s_Particles].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
-	float inPixelRadius = particles[0].particle_radius * (input.properties.scr_width / camera.getFrustum().y);
-	inPixelDiameter = 2 * inPixelRadius;
-	shaders[s_Particles].setFloat("u_inPixelRadius", inPixelRadius);
-	shaders[s_Particles].setFloat("u_inPixelDiameter", inPixelDiameter);
+	if (particles.size() > 0) {
+		float inPixelRadius = particles[0].particle_radius * (input.properties.scr_width / camera.getFrustum().y);
+		inPixelDiameter = 2 * inPixelRadius;
+		shaders[s_Particles].setFloat("u_inPixelRadius", inPixelRadius);
+		shaders[s_Particles].setFloat("u_inPixelDiameter", inPixelDiameter);
+	}
+	
 }
 
 void Scene::setCameraProjection(const OrthographicCamera& camera)
@@ -71,25 +87,6 @@ void Scene::setCameraProjection(const OrthographicCamera& camera)
 
 	shaders[s_Particles].use();
 	shaders[s_Particles].setMat4("u_projectionViewMatrix", camera.getProjectionViewMatrix());
-}
-
-void Scene::processInput()
-{
-	for (auto& softBody : softBodies) {
-		/*if (InputHandler::mouse.is_double_clicked[GLFW_MOUSE_BUTTON_LEFT] && InputHandler::mouse.double_click_cout[GLFW_MOUSE_BUTTON_LEFT] % 2 == 1) {
-			softBody.update_sticked_particle_id();
-		}*/
-	}
-}
-
-void Scene::simulateMeshes()
-{
-	for (auto& softBody : softBodies) {
-		softBody.simulate();
-	}
-	for (auto& particleSystem : particles) {
-		particleSystem.update();
-	}
 }
 
 void Scene::loadSoftBodies()
@@ -141,4 +138,9 @@ void Scene::loadShaders()
 			shaders.push_back(Shader(shaderFolderPath + line + ".vert", shaderFolderPath + line + ".frag", ""));
 		}
 	}
+}
+
+void Scene::loadCanvases()
+{
+	canvases.push_back(Canvas(glm::vec4(-1, -1, 1, 1), glm::vec2(100, 100), scene_path + "/Shaders/"));
 }

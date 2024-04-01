@@ -4,8 +4,6 @@
 #include <vector>
 #include "DataTypes.hpp"
 
-
-
 class Mesh {
 public:
     // mesh data

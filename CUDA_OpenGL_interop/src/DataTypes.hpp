@@ -18,6 +18,11 @@ enum {
 };
 
 
+struct CanvasVertex {
+	float2 position;
+	float2 tex_cord;
+};
+
 struct Particle {
 	float2 position;
 	float2 velocity;

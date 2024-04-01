@@ -26,6 +26,11 @@ Callbacks::Callbacks(Project& project) : project(project), input(project.propert
 		project.camera.updatePosition(input);
 		project.scene.setCameraProjection(project.camera); 
 	});
+	setInputResponse(MouseHandler(Buttons(right_button, held), Cursor(is_moving)), [&project](FrameHandler& input)
+	{
+			project.camera.updatePosition(input);
+			project.scene.setCameraProjection(project.camera);
+	});
 }
 
 void Callbacks::framebufferSizeCallback(GLFWwindow* window, int width, int height)

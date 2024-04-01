@@ -7,8 +7,6 @@ void ParticleSystem::init(float scene_width, float scene_height, float particles
 	std::uniform_real_distribution<float> rand_width(4 * particles_radius, scene_width - 4 * particles_radius);
 	for (int i = 0; i < num_particles; i++) {
 		Particle p;
-		//p.position = make_float2(((float)rand() / RAND_MAX) * (scene_width - 2 * min_cell_size) + min_cell_size, ((float)rand() / RAND_MAX) * (scene_height - 2 * min_cell_size) + min_cell_size);
-		//p.position = make_float2(((float)rand() / RAND_MAX) * 2 - 1, ((float)rand() / RAND_MAX) * 2 - 1);
 		p.position = make_float2(rand_width(gen), rand_height(gen));
 		p.velocity = make_float2(0, 0);
 		particles.push_back(p);
@@ -34,7 +32,6 @@ void ParticleSystem::draw(Shader& shader)
 void ParticleSystem::update()
 {
 	collisions.check_collision();
-	//updateParticlesKernel << <collisions.num_blocks, collisions.num_threads >> > (d_particles, particles.size(), Time::delta_time, particle_radius, 1.0f - particle_radius);
 	cudaDeviceSynchronize();
 }
 

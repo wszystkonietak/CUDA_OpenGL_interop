@@ -1,2 +1,1 @@
 ParticleSystem(scene_width, scene_height, particle_radius, num_particles);
-1.0f, 1.0f, 0.00085f, 250000
