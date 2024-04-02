@@ -1,19 +1,31 @@
 #include "Canvas.cuh"
 
-__device__ float4 gradient(CanvasConstants* constants)
+__device__ float4 flying_ball(CanvasConstants constants)
 {
-	threadIdx.x;
-	return make_float4((blockIdx.x * blockDim.x + threadIdx.x) / (float)constants->texture_resolution.x, (blockIdx.y * blockDim.y + threadIdx.y) / (float)constants->texture_resolution.y, 0.0f, 1.0f);
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+	float x_norm = x / (float)constants.texture_resolution.x;
+	float y_norm = y / (float)constants.texture_resolution.y;
+
+	float t = constants.delta_time;
+	float radius = 0.1;
+	float2 point = make_float2(sin(t) * 0.5 + 0.5, cos(2 * t) * 0.5 + 0.5);
+	float grey_value = 0;
+	float a = (point.x - x_norm) * (point.x - x_norm) + (point.y - y_norm) * (point.y - y_norm);
+
+	if (sqrtf(a) < radius)
+		grey_value = 1;
+	return make_float4(grey_value, a, a, 1.0f);
 }
 
-__device__ UpdateFunctionPtr d_gradient_ptr = gradient;
+__device__ UpdateFunctionPtr d_flying_ball_ptr = flying_ball;
 
 __global__ void updateCanvas(UpdateFunctionPtr func, cudaSurfaceObject_t surfaceObj, CanvasConstants constants) {
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (x < constants.texture_resolution.x && y < constants.texture_resolution.y) {
-		surf2Dwrite((*func)(&constants), surfaceObj, x * sizeof(float4), y);
+		surf2Dwrite((*func)(constants), surfaceObj, x * sizeof(float4), y);
 	}
 }
 
@@ -21,7 +33,7 @@ void Canvas::setUpdateFunctions()
 {
 	update_functions = std::vector<UpdateFunctionPtr>(1, 0);
 	UpdateFunctionPtr h_update_functoin;
-	cudaMemcpyFromSymbol(&h_update_functoin, d_gradient_ptr, sizeof(UpdateFunctionPtr));
+	cudaMemcpyFromSymbol(&h_update_functoin, d_flying_ball_ptr, sizeof(UpdateFunctionPtr));
 	update_functions[CanvasStyle::gradient_id] = h_update_functoin;
 }
 
@@ -55,10 +67,10 @@ void Canvas::init(glm::vec4&& boundings, glm::vec2&& texture_size, std::string&&
 	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, texture_size.x, texture_size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
-	glClearTexImage(texture, 0, GL_RGB, GL_FLOAT, &glm::vec4(0.5)[0]);
+	glClearTexImage(texture, 0, GL_RGBA, GL_FLOAT, &glm::vec4(0.5)[0]);
 	glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 
 	glActiveTexture(GL_TEXTURE0);

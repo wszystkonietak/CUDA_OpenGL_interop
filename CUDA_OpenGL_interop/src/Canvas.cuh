@@ -16,7 +16,7 @@ struct CanvasConstants {
 	float2 texture_resolution;
 };
 
-typedef float4 (*UpdateFunctionPtr)(CanvasConstants*);
+typedef float4 (*UpdateFunctionPtr)(CanvasConstants);
 
 __global__ void updateCanvas(UpdateFunctionPtr func, cudaSurfaceObject_t canvas, CanvasConstants constants);
 __device__ float4 gradient(CanvasConstants constants);

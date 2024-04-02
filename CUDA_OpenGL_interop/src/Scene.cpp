@@ -145,5 +145,5 @@ void Scene::loadShaders()
 
 void Scene::loadCanvases()
 {
-	canvases.push_back(Canvas(glm::vec4(-1, -1, 1, 1), glm::vec2(100, 100), scene_path + "/Shaders/"));
+	canvases.push_back(Canvas(glm::vec4(-1, -1, 1, 1), glm::vec2(1000, 1000), scene_path + "/Shaders/"));
 }
