@@ -34,6 +34,9 @@ void Scene::updateMeshes()
 	for (auto& particleSystem : particles) {
 		particleSystem.update();
 	}
+	for (auto& canvas : canvases) {
+		canvas.update();
+	}
 }
 
 void Scene::render()
