@@ -40,6 +40,12 @@ void Canvas::setUpdateFunctions()
 void Canvas::init(glm::vec4&& boundings, glm::vec2&& texture_size, std::string&& shaders_path)
 {
 	this->boundings = std::move(boundings);
+	if (this->boundings.x > this->boundings.z) {
+		std::swap(this->boundings.x, this->boundings.z);
+	}
+	if (this->boundings.y > this->boundings.w) {
+		std::swap(this->boundings.y, this->boundings.w);
+	}
 	this->texture_size = std::move(texture_size);
 	shader = Shader(shaders_path + "/canvas.vert", shaders_path + "/canvas.frag");
 	float quadVertices[] = {

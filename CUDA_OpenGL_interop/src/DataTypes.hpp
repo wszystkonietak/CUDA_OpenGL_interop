@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <math.h>
 #include <string>
+#include "Surface.hpp"
 
 enum {
 	s_Basic = 0,

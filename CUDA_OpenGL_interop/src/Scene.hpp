@@ -3,8 +3,9 @@
 #include <glm/gtc/type_ptr.hpp>
 #include "SoftBody.cuh"
 #include "ParticleSystem.cuh"
-#include "Properties.hpp"
 #include "Canvas.cuh"
+#include "Water.cuh"
+#include "Properties.hpp"
 #include "Camera.hpp"
 #include "Shader.hpp"
 
@@ -23,9 +24,11 @@ private:
 	void loadParticles();
 	void loadShaders();
 	void loadCanvases();
+	void loadFluids();
 	std::string scene_path;
+	std::vector<FlipFluid> fluids;
 	std::vector<SoftBody> softBodies;
-	std::vector<ParticleSystem> particles;
 	std::vector<Canvas> canvases;
+	std::vector<ParticleSystem> particles;
 	std::vector<Shader> shaders;
 };

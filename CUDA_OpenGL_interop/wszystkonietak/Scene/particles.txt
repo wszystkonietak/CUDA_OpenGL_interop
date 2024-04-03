@@ -1,1 +1,1 @@
-ParticleSystem(scene_width, scene_height, particle_radius, num_particles); 1, 1, 0.00087f, 250000
+ParticleSystem(scene_width, scene_height, particle_radius, num_particles); 1, 1, 0.00043f, 1000000

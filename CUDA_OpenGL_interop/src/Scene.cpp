@@ -14,6 +14,7 @@ void Scene::load(const std::string& project_path)
 	loadParticles();
 	loadShaders();
 	loadCanvases();
+	loadFluids();
 }
 
 void Scene::updateShaders(OrthographicCamera& camera)
@@ -50,6 +51,9 @@ void Scene::render()
 	}
 	for (auto& canvas : canvases) {
 		canvas.draw();
+	}
+	for (auto& fluid : fluids) {
+		fluid.draw();
 	}
 }
 
@@ -145,5 +149,10 @@ void Scene::loadShaders()
 
 void Scene::loadCanvases()
 {
-	canvases.push_back(Canvas(glm::vec4(-1, -1, 1, 1), glm::vec2(1000, 1000), scene_path + "/Shaders/"));
+	//canvases.push_back(Canvas(glm::vec4(-1, -1, 1, 1), glm::vec2(1000, 1000), scene_path + "/Shaders/"));
+}
+
+void Scene::loadFluids()
+{
+	fluids.push_back(FlipFluid(glm::vec4(0, 0, 1, 1), scene_path + "/Shaders/"));
 }
