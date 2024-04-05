@@ -38,6 +38,9 @@ void Scene::updateMeshes()
 	for (auto& canvas : canvases) {
 		canvas.update();
 	}
+	for (auto& fluid : fluids) {
+		fluid.update();
+	}
 }
 
 void Scene::render()
@@ -154,5 +157,5 @@ void Scene::loadCanvases()
 
 void Scene::loadFluids()
 {
-	fluids.push_back(FlipFluid(glm::vec4(0, 0, 1, 1), scene_path + "/Shaders/"));
+	fluids.push_back(FlipFluid(glm::vec4(0, 1, 0, 1), scene_path + "/Shaders/"));
 }

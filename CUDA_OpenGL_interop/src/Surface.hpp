@@ -20,9 +20,8 @@ public:
 	}
 	Surface(unsigned int texture, unsigned int target) {
 		cudaGraphicsResource_t cudaTextureResource;
-		cudaGraphicsGLRegisterImage(&cudaTextureResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore);
+		cudaGraphicsGLRegisterImage(&cudaTextureResource, texture, target, cudaGraphicsRegisterFlagsSurfaceLoadStore);
 
-		cudaArray* cudaArray;
 		cudaGraphicsMapResources(1, &cudaTextureResource, 0);
 		cudaGraphicsSubResourceGetMappedArray(&array, cudaTextureResource, 0, 0);
 
@@ -32,7 +31,7 @@ public:
 		resDesc.res.array.array = array;
 		cudaCreateSurfaceObject(&surface, &resDesc);
 	}
-	cudaSurfaceObject_t surface;
+	cudaSurfaceObject_t surface = 0;
 private:
 	cudaArray_t array;
 };
