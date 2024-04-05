@@ -15,7 +15,7 @@ public:
 	float cell_size;
 	float particle_radius;
 	unsigned int particles_size;
-	unsigned int rest_particle_density = 1024;
+	unsigned int rest_particle_density = 1;
 	glm::vec2 resolution;
 	glm::vec2 size;
 	std::vector<Particle> particles;
