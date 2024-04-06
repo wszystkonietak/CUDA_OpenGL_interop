@@ -1,2 +1,2 @@
 [WarpWatch]
-Expressions=vel.y, weights.x * vel.y, pos.x, weights, weights.x + weights.y + weights.z + weights.w, particles[g_id].velocity.y, weights.x * vel.y, weights.y * vel.y, delta_time
+Expressions=vel.y, weights.x * vel.y, pos.x, weights, weights.x + weights.y + weights.z + weights.w, particles[g_id].velocity.y, weights.x * vel.y, weights.y * vel.y, delta_time, s[t_id]

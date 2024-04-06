@@ -30,12 +30,18 @@ __global__ void clear_grid(cudaSurfaceObject_t SurfObj, int width, int height)
 	}
 }
 
-__global__ void simulate_particles(cudaSurfaceObject_t grid, cudaSurfaceObject_t velocity, Particle* particles, int num_particles, float4 boundings, float cell_size, float delta_time) {
+__global__ void simulate_particles(cudaSurfaceObject_t grid, cudaSurfaceObject_t velocity, cudaSurfaceObject_t sum_of_weights, Particle* particles, uint2* busy_cells, int num_particles, float4 boundings, float cell_size, uint2 resolution, unsigned int* busy_cells_size, float delta_time) {
+	extern __shared__ unsigned int s[];
 	int g_id = blockIdx.x * blockDim.x + threadIdx.x;
+	int t_id = threadIdx.x;
 	float2 vel, pos, delta;
-	int2 cell;
+	uint2 cell = make_uint2(0, 0), g_cell;
 	float4 weights, vy;
 	
+	for (int i = t_id; i < resolution.x * resolution.y; i += blockDim.x) {
+		s[i] = 0;
+	}
+
 	while (g_id < num_particles) {
 		vel = particles[g_id].velocity;
 		pos = particles[g_id].position;
@@ -43,8 +49,6 @@ __global__ void simulate_particles(cudaSurfaceObject_t grid, cudaSurfaceObject_t
 		
 		pos.x += vel.x * delta_time;
 		pos.y += vel.y * delta_time;
-		
-
 
 		if (pos.x <= boundings.x) {
 			vel.x *= -0.8f;
@@ -65,10 +69,9 @@ __global__ void simulate_particles(cudaSurfaceObject_t grid, cudaSurfaceObject_t
 		}
 
 		particles[g_id].position = pos;
-		//particles[g_id].velocity = vel;
+		cell = make_uint2(pos.x / cell_size, pos.y / cell_size);
 
-		cell = make_int2(pos.x / cell_size, pos.y / cell_size);
-		surf2Dwrite(1.0f, grid, cell.x * sizeof(float), cell.y);
+		s[cell.x * resolution.y + cell.y]++;
 
 		delta.x = (pos.x - cell_size * cell.x) / cell_size;
 		delta.y = (pos.y - cell_size * cell.y) / cell_size;
@@ -77,16 +80,44 @@ __global__ void simulate_particles(cudaSurfaceObject_t grid, cudaSurfaceObject_t
 		weights.y = delta.x * (1 - delta.y);
 		weights.z = (delta.x) * (delta.y);
 		weights.w = (1 - delta.x) * (delta.y);
-		vy.x = weights.x * vel.y;
-		vy.y = weights.y * vel.y;
-		vy.z = weights.z * vel.y;
-		vy.w = weights.w * vel.y;
+
 		surf2Dwrite(make_float2(weights.x * vel.x, weights.x * vel.y), velocity, cell.x * sizeof(float2), cell.y);
 		surf2Dwrite(make_float2(weights.y * vel.x, weights.y * vel.y), velocity, (cell.x + 1) * sizeof(float2), cell.y);
 		surf2Dwrite(make_float2(weights.z * vel.x, weights.z * vel.y), velocity, (cell.x + 1) * sizeof(float2), cell.y + 1);
 		surf2Dwrite(make_float2(weights.w * vel.x, weights.w * vel.y), velocity, cell.x * sizeof(float2), cell.y + 1);
 
+		surf2Dwrite(weights.x, sum_of_weights, cell.x * sizeof(float), cell.y);
+		surf2Dwrite(weights.y, sum_of_weights, (cell.x + 1) * sizeof(float), cell.y);
+		surf2Dwrite(weights.z, sum_of_weights, (cell.x + 1) * sizeof(float), cell.y + 1);
+		surf2Dwrite(weights.w, sum_of_weights, cell.x * sizeof(float), cell.y + 1);
+
 		g_id += blockDim.x * gridDim.x;
+	}
+	__syncthreads();
+
+	g_cell.x = t_id / resolution.x;
+	g_cell.y = t_id % resolution.y;
+
+	while(g_cell.x < resolution.x)
+	{
+		if (s[t_id])
+		{
+			busy_cells[atomicAdd(&busy_cells_size[0], 1)] = g_cell;
+			surf2Dwrite(1.0f, grid, g_cell.x * sizeof(float), g_cell.y);
+		}
+
+		t_id += blockDim.x;
+		g_cell.x = t_id / resolution.x;
+		g_cell.y = t_id % resolution.y;
+	}
+}
+
+__global__ void update_velocities(cudaSurfaceObject_t velocity, cudaSurfaceObject_t sum_of_weights, uint2* busy_cells, unsigned int* busy_cells_size)
+{
+	int g_id = blockIdx.x * blockDim.x + threadIdx.x;
+	for (int i = g_id; i < busy_cells_size[0]; i += blockDim.x * gridDim.x)
+	{
+
 	}
 }
 
@@ -150,7 +181,7 @@ void FlipFluid::init(std::string&& shaders_path)
 	size.y = boundings.w - boundings.z;
 	resolution = size / cell_size;
 	particles_size = size.x * size.y * rest_particle_density;
-
+	particle_boundings = make_float4(boundings.x + cell_size + 0.00001, boundings.y - cell_size - 0.00001, boundings.z + cell_size + 0.00001, boundings.w - cell_size - 0.00001);
 
 	float2* h_solid_cells = new float2[resolution.x * resolution.y];
 	for (int y = 0; y < resolution.y; y++) {
@@ -193,7 +224,8 @@ void FlipFluid::init(std::string&& shaders_path)
 	//glClearTexImage(id_grid, 0, GL_RGBA, GL_FLOAT, &glm::vec1(0.5)[0]);
 	glBindImageTexture(0, id_grid, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 
-
+	cudaMalloc(&d_busy_cells, sizeof(uint2) * resolution.x * resolution.y);
+	cudaMalloc(&d_busy_cells_size, sizeof(unsigned int));
 	solid_cells = Surface<float2>(id_solid_cells, GL_TEXTURE_2D);
 	velocity = Surface<float2>(id_velocity, GL_TEXTURE_2D);
 	grid = Surface<float>(id_grid, GL_TEXTURE_2D);
@@ -245,42 +277,44 @@ void FlipFluid::init(std::string&& shaders_path)
 
 void FlipFluid::update()
 {
+	cudaMemset(d_busy_cells_size, 0, 1);
 	clear_grid << <grid_size, block_size >> > (grid.surface, resolution.x, resolution.y);
 	//collisions.check_collision();
 
-	simulate_particles << <p_grid_size, p_block_size >> > (grid.surface, velocity.surface, d_particles, particles.size(), make_float4(boundings.x + cell_size + 0.00001, boundings.y - cell_size - 0.00001, boundings.z + cell_size + 0.00001, boundings.w - cell_size - 0.00001), cell_size, 0.016/*Time::delta_time*/);
+	simulate_particles << <p_grid_size, p_block_size, sizeof(unsigned int) * resolution.x * resolution.y >> > (grid.surface, velocity.surface, sum_of_weights.surface, d_particles, d_busy_cells, particles.size(), particle_boundings, cell_size, make_uint2(resolution.x, resolution.y), d_busy_cells_size, Time::delta_time);
+	update_velocities << <grid_size, block_size >> > ();
 	grid_to_particles << <p_grid_size, p_block_size >> > (velocity.surface, d_particles, cell_size, particles.size());
 }
 
 void FlipFluid::draw()
 {
 	cudaDeviceSynchronize();
-	//s_textures.use();
-	//unsigned int quadvao = 0, quadvbo = 0;
-	//if (quadvao == 0) {
-	//	float quadVertices[] = {
-	//		// positions  // texture Coords
-	//		-1.0f,  1.0f, 0.0f, 1.0f,
-	//		-1.0f, -1.0f, 0.0f, 0.0f,
-	//		 1.0f,  1.0f, 1.0f, 1.0f,
-	//		 1.0f, -1.0f, 1.0f, 0.0f,
-	//	};
-	//	// setup plane VAO
-	//	glGenVertexArrays(1, &quadvao);
-	//	glGenBuffers(1, &quadvbo);
-	//	glBindVertexArray(quadvao);
-	//	glBindBuffer(GL_ARRAY_BUFFER, quadvbo);
-	//	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
-	//	glEnableVertexAttribArray(0);
-	//	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	//	glEnableVertexAttribArray(1);
-	//	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-	//}
-	//
-	//glActiveTexture(GL_TEXTURE0);
-	//glBindTexture(GL_TEXTURE_2D, id_grid);
-	//glBindVertexArray(quadvao);
-	//glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	s_textures.use();
+	unsigned int quadvao = 0, quadvbo = 0;
+	if (quadvao == 0) {
+		float quadVertices[] = {
+			// positions  // texture Coords
+			-1.0f,  1.0f, 0.0f, 1.0f,
+			-1.0f, -1.0f, 0.0f, 0.0f,
+			 1.0f,  1.0f, 1.0f, 1.0f,
+			 1.0f, -1.0f, 1.0f, 0.0f,
+		};
+		// setup plane VAO
+		glGenVertexArrays(1, &quadvao);
+		glGenBuffers(1, &quadvbo);
+		glBindVertexArray(quadvao);
+		glBindBuffer(GL_ARRAY_BUFFER, quadvbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+	}
+	
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, id_grid);
+	glBindVertexArray(quadvao);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 	s_particles.use();
 	glBindVertexArray(VAO);

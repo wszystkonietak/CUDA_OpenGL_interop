@@ -12,6 +12,7 @@ public:
 	void update();
 	void draw();
 	glm::vec4 boundings;
+	float4 particle_boundings;
 	float cell_size;
 	float particle_radius;
 	unsigned int particles_size;
@@ -27,6 +28,8 @@ public:
 	Surface<float> sum_of_weights;
 	Surface<float> blank;
 	Particle* d_particles;
+	uint2* d_busy_cells;
+	unsigned int* d_busy_cells_size;
 	unsigned int VAO, VBO;
 	unsigned int id_solid_cells, id_velocity, id_grid;
 	Shader s_textures, s_particles;
