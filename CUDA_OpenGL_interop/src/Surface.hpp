@@ -5,7 +5,7 @@ template <typename T>
 class Surface {
 public:
 	Surface() = default;
-	Surface(float2 resolution, T* h_data = nullptr, unsigned int flags = cudaArraySurfaceLoadStore)
+	Surface(uint2 resolution, T* h_data = nullptr, unsigned int flags = cudaArraySurfaceLoadStore) : resolution(resolution)
 	{
 		cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<T>();
 		cudaMallocArray(&array, &channelDesc, resolution.x, resolution.y, flags);
@@ -18,7 +18,8 @@ public:
 		desc.res.array.array = array;
 		cudaCreateSurfaceObject(&surface, &desc);
 	}
-	Surface(unsigned int texture, unsigned int target) {
+	Surface(unsigned int texture, unsigned int target, uint2 resolution) : resolution(resolution)
+	{
 		cudaGraphicsResource_t cudaTextureResource;
 		cudaGraphicsGLRegisterImage(&cudaTextureResource, texture, target, cudaGraphicsRegisterFlagsSurfaceLoadStore);
 
@@ -34,4 +35,5 @@ public:
 	cudaSurfaceObject_t surface = 0;
 private:
 	cudaArray_t array;
+	uint2 resolution;
 };
