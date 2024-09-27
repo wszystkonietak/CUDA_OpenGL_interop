@@ -18,7 +18,7 @@ public:
 	float particle_radius;
 	unsigned int particles_size;
 	unsigned int rest_particle_density = 500;
-	unsigned int num_iters = 20;
+	unsigned int num_iters = 2;
 	uint2 resolution;
 	glm::vec2 size;
 	std::vector<Particle> particles;

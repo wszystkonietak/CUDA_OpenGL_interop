@@ -149,42 +149,35 @@ __global__ void update_velocities(float2* grid_velocities, float* sum_of_weights
 
 __global__ void calculate_divergence(cudaSurfaceObject_t grid, cudaSurfaceObject_t solid_cells, float2* grid_velocities, uint2 resolution, unsigned int iteration) {
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x + 1;
-	unsigned int y = blockIdx.y * blockDim.y + 1;
+	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y + 1;
 
 	if (x < resolution.x - 1 && y < resolution.y - 1) {
 		float isBusy = surf2Dread<float>(grid, x * sizeof(float), y);
 		if (isBusy == 1.0f) {
 			if ((x + y) % 2 == (iteration % 2)) {
-				float left = grid_velocities[((x - 1) * resolution.y) + y].x;
+				float left = grid_velocities[((x) * resolution.y) + y].x;
 				float right = grid_velocities[((x + 1) * resolution.y) + y].x;
+				float bottom = grid_velocities[(x * resolution.y) + (y)].y;
 				float top = grid_velocities[(x * resolution.y) + (y + 1)].y;
-				float bottom = grid_velocities[(x * resolution.y) + (y - 1)].y;
+				
+				float solid_left = surf2Dread<float2>(solid_cells, (x - 1) * sizeof(float2), y).x;
+				float solid_right = surf2Dread<float2>(solid_cells, (x + 1) * sizeof(float2), y).x;
+				float solid_bottom = surf2Dread<float2>(solid_cells, x * sizeof(float2), y - 1).y;
+				float solid_top = surf2Dread<float2>(solid_cells, x * sizeof(float2), y + 1).y;
 
-				float2 solid_left = surf2Dread<float2>(solid_cells, (x - 1) * sizeof(float2), y);
-				float2 solid_right = surf2Dread<float2>(solid_cells, (x + 1) * sizeof(float2), y);
-				float2 solid_top = surf2Dread<float2>(solid_cells, x * sizeof(float2), y - 1);
-				float2 solid_bottom = surf2Dread<float2>(solid_cells, x * sizeof(float2), y + 1);
-
+				float sumOfStates = solid_left + solid_right + solid_bottom + solid_top;
 				float divergence = (right - left + top - bottom);
-				divergence = divergence * 1.9;
-
-				float sumOfStates = solid_left.x + solid_right.x + solid_bottom.y + solid_top.y;
-
+				
+				divergence *= 1.9f;
 				divergence /= sumOfStates;
-
-				grid_velocities[((x - 1) * resolution.y) + y].x += divergence * solid_left.x;
-				grid_velocities[((x + 1) * resolution.y) + y].x += divergence * solid_right.x;
-				grid_velocities[(x * resolution.y) + (y + 1)].y += divergence * solid_bottom.y;
-				grid_velocities[(x * resolution.y) + (y - 1)].y += divergence * solid_top.y;
-
+				grid_velocities[((x + 1) * resolution.y) + y].x -= divergence * solid_right;
+				grid_velocities[((x) * resolution.y) + y].x += divergence * solid_left;
+				grid_velocities[(x * resolution.y) + (y + 1)].y -= divergence * solid_top;
+				grid_velocities[(x * resolution.y) + (y)].y += divergence * solid_bottom;
 			}
 		}
 	}
 }
-
-
-
-
 
 __global__ void grid_to_particles(float2* grid_velocities, Particle* particles, float cell_size, int num_particles, uint2 resolution)
 {
@@ -230,7 +223,7 @@ __global__ void grid_to_particles(float2* grid_velocities, Particle* particles, 
 void FlipFluid::init(std::string&& shaders_path)
 {
 	cell_size = 0.02;
-	particle_radius = 0.0123;
+	particle_radius = 0.0023;
 	s_textures = Shader(shaders_path + "/canvas.vert", shaders_path + "/canvas.frag");
 	s_particles = Shader(shaders_path + "/particles.vert", shaders_path + "/particles.frag");
 	s_particles.use();
@@ -246,6 +239,7 @@ void FlipFluid::init(std::string&& shaders_path)
 	size.y = boundings.w - boundings.z;
 	resolution = make_uint2(size.x / cell_size, size.y / cell_size);
 	particles_size = size.x * size.y * rest_particle_density;
+	particles_size = 20000;
 	particle_boundings = make_float4(boundings.x + cell_size + 0.00001, boundings.y - cell_size - 0.00001, boundings.z + cell_size + 0.00001, boundings.w - cell_size - 0.00001);
 	mem_size = resolution.x * resolution.y;
 
@@ -267,7 +261,6 @@ void FlipFluid::init(std::string&& shaders_path)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, resolution.x, resolution.y, 0, GL_RED, GL_FLOAT, NULL);
-	//glClearTexImage(id_grid, 0, GL_RGBA, GL_FLOAT, &glm::vec1(0.5)[0]);
 	glBindImageTexture(0, id_grid, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
 	
 	cudaMalloc(&d_busy_cells, sizeof(ushort2) * mem_size);
@@ -344,8 +337,8 @@ void FlipFluid::update()
 	simulate_particles <<< p_grid_size, p_block_size, simulate_particles_shared_size >>> (grid.surface, d_particles, d_grid_velocities, d_sum_of_weights, d_busy_cells, d_busy_cells_size, particles_size, resolution, mem_size, particle_boundings, cell_size, Time::delta_time);
 
 	update_velocities <<<grid_size, block_size >>> (d_grid_velocities, d_sum_of_weights, d_busy_cells, d_busy_cells_size, resolution);
-
-	for (int i = 0; i < num_iters; i++) {
+	
+	for (int i = 0; i < 20; i++) {
 		calculate_divergence << <grid_size, block_size >> > (grid.surface, solid_cells.surface, d_grid_velocities, resolution, i);
 	}
 
