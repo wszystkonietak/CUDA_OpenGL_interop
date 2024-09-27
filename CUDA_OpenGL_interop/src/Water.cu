@@ -20,14 +20,13 @@ __global__ void create_solid_cells(cudaSurfaceObject_t SurfObj, int width, int h
 	}
 }
 
-__global__ void clear_grid(cudaSurfaceObject_t grid, cudaSurfaceObject_t sum_of_weights, int width, int height)
+__global__ void clear_grid(cudaSurfaceObject_t grid, uint2 resolution)
 {
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (x < width && y < height) {
+	if (x < resolution.x && y < resolution.y) {
 		surf2Dwrite(0.0f, grid, x * sizeof(float), y);
-		surf2Dwrite(0.0f, sum_of_weights, x * sizeof(float), y);
 	}
 }
 
@@ -148,6 +147,45 @@ __global__ void update_velocities(float2* grid_velocities, float* sum_of_weights
 	}
 }
 
+__global__ void calculate_divergence(cudaSurfaceObject_t grid, cudaSurfaceObject_t solid_cells, float2* grid_velocities, uint2 resolution, unsigned int iteration) {
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x + 1;
+	unsigned int y = blockIdx.y * blockDim.y + 1;
+
+	if (x < resolution.x - 1 && y < resolution.y - 1) {
+		float isBusy = surf2Dread<float>(grid, x * sizeof(float), y);
+		if (isBusy == 1.0f) {
+			if ((x + y) % 2 == (iteration % 2)) {
+				float left = grid_velocities[((x - 1) * resolution.y) + y].x;
+				float right = grid_velocities[((x + 1) * resolution.y) + y].x;
+				float top = grid_velocities[(x * resolution.y) + (y + 1)].y;
+				float bottom = grid_velocities[(x * resolution.y) + (y - 1)].y;
+
+				float2 solid_left = surf2Dread<float2>(solid_cells, (x - 1) * sizeof(float2), y);
+				float2 solid_right = surf2Dread<float2>(solid_cells, (x + 1) * sizeof(float2), y);
+				float2 solid_top = surf2Dread<float2>(solid_cells, x * sizeof(float2), y - 1);
+				float2 solid_bottom = surf2Dread<float2>(solid_cells, x * sizeof(float2), y + 1);
+
+				float divergence = (right - left + top - bottom);
+				divergence = divergence * 1.9;
+
+				float sumOfStates = solid_left.x + solid_right.x + solid_bottom.y + solid_top.y;
+
+				divergence /= sumOfStates;
+
+				grid_velocities[((x - 1) * resolution.y) + y].x += divergence * solid_left.x;
+				grid_velocities[((x + 1) * resolution.y) + y].x += divergence * solid_right.x;
+				grid_velocities[(x * resolution.y) + (y + 1)].y += divergence * solid_bottom.y;
+				grid_velocities[(x * resolution.y) + (y - 1)].y += divergence * solid_top.y;
+
+			}
+		}
+	}
+}
+
+
+
+
+
 __global__ void grid_to_particles(float2* grid_velocities, Particle* particles, float cell_size, int num_particles, uint2 resolution)
 {
 	int g_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -254,13 +292,13 @@ void FlipFluid::init(std::string&& shaders_path)
 
 
 	std::uniform_real_distribution<float> rand_width(boundings.x + cell_size, 
-		boundings.y - cell_size);
+		(boundings.y - cell_size) / 2.0);
 	std::uniform_real_distribution<float> rand_height(boundings.z + cell_size, 
 		boundings.w - cell_size);
+	std::uniform_real_distribution<float> rand_velocity(-1, 1);
 	for (int i = 0; i < particles_size; i++) {
-		//particles[i].position = make_float2(0.2 + (float)i * 0.02, 0.1);
 		particles[i].position = make_float2(rand_width(gen), rand_height(gen));
-		particles[i].velocity = make_float2(0, 0);
+		particles[i].velocity = make_float2(rand_velocity(gen), rand_velocity(gen));
 	}
 
 	glGenVertexArrays(1, &VAO);
@@ -301,9 +339,15 @@ void FlipFluid::update()
 	cudaMemset(d_grid_velocities, 0, sizeof(float2) * mem_size);
 	cudaMemset(d_sum_of_weights, 0, sizeof(float) * mem_size);
 	
+	clear_grid << <grid_size, block_size >> > (grid.surface, resolution);
+	
 	simulate_particles <<< p_grid_size, p_block_size, simulate_particles_shared_size >>> (grid.surface, d_particles, d_grid_velocities, d_sum_of_weights, d_busy_cells, d_busy_cells_size, particles_size, resolution, mem_size, particle_boundings, cell_size, Time::delta_time);
 
-	update_velocities << <grid_size, block_size >> > (d_grid_velocities, d_sum_of_weights, d_busy_cells, d_busy_cells_size, resolution);
+	update_velocities <<<grid_size, block_size >>> (d_grid_velocities, d_sum_of_weights, d_busy_cells, d_busy_cells_size, resolution);
+
+	for (int i = 0; i < num_iters; i++) {
+		calculate_divergence << <grid_size, block_size >> > (grid.surface, solid_cells.surface, d_grid_velocities, resolution, i);
+	}
 
 	grid_to_particles << <p_grid_size, p_block_size >> > (d_grid_velocities, d_particles, cell_size, particles_size, resolution);
 }
@@ -312,6 +356,7 @@ void FlipFluid::draw()
 {
 	cudaDeviceSynchronize();
 	s_textures.use();
+	
 	unsigned int quadvao = 0, quadvbo = 0;
 	if (quadvao == 0) {
 		float quadVertices[] = {

@@ -1,5 +1,6 @@
 #include "CollisionDetection.cuh"
 #include <vector>
+#include <stdio.h>
 #include "RandomSeed.hpp"
 #include "Time.hpp"
 #include "Shader.hpp"
@@ -17,6 +18,7 @@ public:
 	float particle_radius;
 	unsigned int particles_size;
 	unsigned int rest_particle_density = 500;
+	unsigned int num_iters = 20;
 	uint2 resolution;
 	glm::vec2 size;
 	std::vector<Particle> particles;
