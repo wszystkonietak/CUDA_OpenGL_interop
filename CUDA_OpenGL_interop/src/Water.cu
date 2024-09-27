@@ -56,7 +56,7 @@ __global__ void simulate_particles(cudaSurfaceObject_t grid, Particle* particles
 	while (g_id < particles_size) {
 		vel = particles[g_id].velocity;
 		pos = particles[g_id].position;
-		vel.y -= 9.81f * delta_time;
+		vel.y -= 3.81f * delta_time;
 		
 		pos.x += vel.x * delta_time;
 		pos.y += vel.y * delta_time;
@@ -223,12 +223,12 @@ __global__ void grid_to_particles(float2* grid_velocities, Particle* particles, 
 void FlipFluid::init(std::string&& shaders_path)
 {
 	cell_size = 0.02;
-	particle_radius = 0.0023;
+	particle_radius = 0.0033;
 	s_textures = Shader(shaders_path + "/canvas.vert", shaders_path + "/canvas.frag");
 	s_particles = Shader(shaders_path + "/particles.vert", shaders_path + "/particles.frag");
 	s_particles.use();
 	s_particles.setMat4("u_projectionViewMatrix", glm::ortho(0.0f, 1.0f, 0.0f, 1.0f, -1.0f, 1.0f));
-	s_particles.setFloat("u_inPixelDiameter", particle_radius * 800);
+	s_particles.setFloat("u_inPixelDiameter", particle_radius * 1000);
 	if (boundings.x > boundings.y) {
 		std::swap(boundings.x, boundings.y);
 	}
@@ -239,7 +239,7 @@ void FlipFluid::init(std::string&& shaders_path)
 	size.y = boundings.w - boundings.z;
 	resolution = make_uint2(size.x / cell_size, size.y / cell_size);
 	particles_size = size.x * size.y * rest_particle_density;
-	particles_size = 20000;
+	particles_size = 10000;
 	particle_boundings = make_float4(boundings.x + cell_size + 0.00001, boundings.y - cell_size - 0.00001, boundings.z + cell_size + 0.00001, boundings.w - cell_size - 0.00001);
 	mem_size = resolution.x * resolution.y;
 
@@ -318,7 +318,7 @@ void FlipFluid::init(std::string&& shaders_path)
 	cudaGraphicsResourceGetMappedPointer((void**)&d_particles, &num_bytes, cuda_vbo_resource);
 
 	cudaGraphicsUnmapResources(1, &cuda_vbo_resource);
-	//collisions.setup(size.x, size.y, particles.size(), particle_radius, d_particles);
+	collisions.setup(size.x, size.y, particles.size(), particle_radius, d_particles);
 	cudaDeviceSynchronize();
 	simulate_particles_shared_size = sizeof(float2) * mem_size + 
 		sizeof(float) * mem_size + sizeof(unsigned short) * mem_size;
@@ -326,6 +326,9 @@ void FlipFluid::init(std::string&& shaders_path)
 
 void FlipFluid::update()
 {
+	for (int i = 0; i < 5; i++) {
+		collisions.check_collision();
+	}
 	cudaMemset( d_busy_cells, 0, sizeof(ushort2) * mem_size);
 	cudaMemset(d_busy_cells_size, 0, sizeof(unsigned int));
 
@@ -338,11 +341,12 @@ void FlipFluid::update()
 
 	update_velocities <<<grid_size, block_size >>> (d_grid_velocities, d_sum_of_weights, d_busy_cells, d_busy_cells_size, resolution);
 	
-	for (int i = 0; i < 20; i++) {
+	for (int i = 0; i < 40; i++) {
 		calculate_divergence << <grid_size, block_size >> > (grid.surface, solid_cells.surface, d_grid_velocities, resolution, i);
 	}
 
 	grid_to_particles << <p_grid_size, p_block_size >> > (d_grid_velocities, d_particles, cell_size, particles_size, resolution);
+	cudaDeviceSynchronize();
 }
 
 void FlipFluid::draw()
