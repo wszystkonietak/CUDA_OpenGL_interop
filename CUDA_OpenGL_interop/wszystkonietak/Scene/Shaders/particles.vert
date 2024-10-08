@@ -9,7 +9,7 @@ out flat int VertexID;
 
 void main()
 {
-	gl_PointSize = u_inPixelDiameter;
+	gl_PointSize = u_inPixelDiameter * 10f;
 	gl_Position = u_projectionViewMatrix * vec4(aPos, 0.0, 1.0);
 	VertexID = gl_VertexID; 
 }

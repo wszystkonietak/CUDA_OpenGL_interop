@@ -29,7 +29,8 @@ void Project::init()
 	scene.load(project_path);
 	camera.load(project_path, properties);
 	scene.setCameraProjection(camera);
-	scene.setCameraZoom(camera, FrameHandler(properties));
+	FrameHandler f = FrameHandler(properties);
+	scene.setCameraZoom(camera, f);
 	glfwSwapInterval(0);
 }
 

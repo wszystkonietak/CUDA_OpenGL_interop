@@ -15,6 +15,7 @@ void Scene::load(const std::string& project_path)
 	loadShaders();
 	loadCanvases();
 	loadFluids();
+	loadTerrain();
 }
 
 void Scene::updateShaders(OrthographicCamera& camera)
@@ -157,5 +158,10 @@ void Scene::loadCanvases()
 
 void Scene::loadFluids()
 {
-	fluids.push_back(FlipFluid(glm::vec4(0, 1, 0, 1), scene_path + "/Shaders/"));
+	//fluids.push_back(FlipFluid(glm::vec4(0, 1, 0, 1), scene_path + "/Shaders/"));
+}
+
+void Scene::loadTerrain()
+{
+	//terrain = TruchetTerrain();
 }

@@ -29,12 +29,12 @@ project (main_prj_name)
 	location "%{prj.name}"
 	kind "ConsoleApp"
 	language "C++"
-	cppdialect "C++17"
+	cppdialect "C++20"
 	staticruntime "on"
 	systemversion "latest"
 	targetdir (outputbindir)
 	objdir (outputobjdir)
-	buildcustomizations "BuildCustomizations/CUDA 12.1"
+	buildcustomizations "BuildCustomizations/CUDA 12.6"
 	externalwarnings "Off"
 	if os.target() == "windows" then
 		cudaFiles { main_prj_name .. "/src/**.cu" } -- files to be compiled into binaries by VS CUDA.

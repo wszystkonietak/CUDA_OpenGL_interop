@@ -7,6 +7,7 @@
 #include "Water.cuh"
 #include "Properties.hpp"
 #include "Camera.hpp"
+#include "TruchetTerrain.hpp"
 #include "Shader.hpp"
 
 class Scene {
@@ -25,10 +26,12 @@ private:
 	void loadShaders();
 	void loadCanvases();
 	void loadFluids();
+	void loadTerrain();
 	std::string scene_path;
 	std::vector<FlipFluid> fluids;
 	std::vector<SoftBody> softBodies;
 	std::vector<Canvas> canvases;
 	std::vector<ParticleSystem> particles;
 	std::vector<Shader> shaders;
+	TruchetTerrain terrain;
 };

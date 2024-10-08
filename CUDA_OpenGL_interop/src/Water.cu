@@ -378,7 +378,7 @@ void FlipFluid::draw()
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, id_grid);
 	glBindVertexArray(quadvao);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	//glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 	s_particles.use();    
 	glBindVertexArray(VAO);
