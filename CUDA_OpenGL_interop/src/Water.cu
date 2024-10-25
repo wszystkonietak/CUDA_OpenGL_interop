@@ -15,7 +15,6 @@ __global__ void create_solid_cells(cudaSurfaceObject_t SurfObj, int width, int h
 	if (x < width && y < height) {
 		data.x = (x < 1 || x > width - 2) ? 0 : 1;
 		data.y = (y < 1 || y > height - 2) ? 0 : 1;
-		// Write to output surface
 		surf2Dwrite(data, SurfObj, x * sizeof(float2), y);
 	}
 }

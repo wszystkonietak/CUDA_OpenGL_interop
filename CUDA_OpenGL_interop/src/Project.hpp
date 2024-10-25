@@ -18,10 +18,10 @@ public:
 
 	operator GLFWwindow*() const { return window; };
 	operator Properties() { return properties; };
-private:
 	void frame_update();
 	void frame_render();
 	void frame_end();
+private:
 	GLFWwindow* window;
 	std::string project_path;
 };

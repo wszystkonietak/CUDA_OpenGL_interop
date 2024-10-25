@@ -30,7 +30,7 @@ void Scene::updateShaders(OrthographicCamera& camera)
 
 void Scene::updateMeshes()
 {
-	for (auto& softBody : softBodies) {
+	/*for (auto& softBody : softBodies) {
 		softBody.simulate();
 	}
 	for (auto& particleSystem : particles) {
@@ -41,12 +41,22 @@ void Scene::updateMeshes()
 	}
 	for (auto& fluid : fluids) {
 		fluid.update();
-	}
+	}*/
+	//terrain.update();
+}
+
+void Scene::reloadShaders()
+{
+	terrain.reloadShader(scene_path + "/Shaders/");
 }
 
 void Scene::render()
 {
-	shaders[s_Basic].use();
+	if (shouldReloadShaders) {
+		reloadShaders();
+		shouldReloadShaders = false;
+	}
+	/*shaders[s_Basic].use();
 	for (auto& softBody : softBodies) {
 		softBody.draw(shaders[s_SoftBody], points);
 	}
@@ -58,7 +68,8 @@ void Scene::render()
 	}
 	for (auto& fluid : fluids) {
 		fluid.draw();
-	}
+	}*/
+	terrain.draw();
 }
 
 void Scene::setCameraZoom(const OrthographicCamera& camera, FrameHandler& input)
@@ -163,5 +174,5 @@ void Scene::loadFluids()
 
 void Scene::loadTerrain()
 {
-	//terrain = TruchetTerrain();
+	terrain = TruchetTerrain(scene_path + "/Shaders/");
 }

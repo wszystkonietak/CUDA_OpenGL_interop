@@ -3,6 +3,7 @@
 Callbacks::Callbacks(Project& project) : project(project), input(project.properties)
 {
 	properties = project;
+	consoleThread = std::thread(consoleInputCallback, std::ref(project));
 	/*responses[MouseHandler(scroll_up)].push_back([&](FrameHandler& input) {project.camera.zoomIn(input); });*/
 	glfwSetFramebufferSizeCallback(project, framebufferSizeCallback);
 	glfwSetKeyCallback(project, keyCallback);
@@ -28,15 +29,39 @@ Callbacks::Callbacks(Project& project) : project(project), input(project.propert
 	});
 }
 
+void Callbacks::consoleInputCallback(Project& project)
+{
+	float r;
+	while (true) {
+		std::cout << "value: " << '\n';
+		std::cin >> r;
+		project.properties.background_color = glm::vec3(r, r, r);
+		if (r) {
+			project.scene.shouldReloadShaders = true;
+		}
+	}
+}
+
 void Callbacks::framebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
+	Callbacks* state = static_cast<Callbacks*>(glfwGetWindowUserPointer(window));
+	state->project.frame_update();
+	state->project.frame_render();
+	state->project.frame_end();
 }
 
 void Callbacks::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
 		glfwSetWindowShouldClose(window, true);
+		return;
+	}
+	Callbacks* state = static_cast<Callbacks*>(glfwGetWindowUserPointer(window));
+	if (key == GLFW_KEY_ENTER && action == GLFW_PRESS && (mods & GLFW_MOD_ALT)) {
+		state->project.scene.reloadShaders();
+		return;
+	}
 }
 
 void Callbacks::cursorPositionCallback(GLFWwindow* window, double xpos, double ypos)

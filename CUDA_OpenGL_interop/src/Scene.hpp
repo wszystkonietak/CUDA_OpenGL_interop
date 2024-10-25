@@ -20,6 +20,8 @@ public:
 	void setCameraProjection(const OrthographicCamera& camera);
 	void updateShaders(OrthographicCamera& camera);
 	void updateMeshes();
+	void reloadShaders();
+	bool shouldReloadShaders = false;
 private:
 	void loadSoftBodies();
 	void loadParticles();

@@ -31,7 +31,7 @@ void Project::init()
 	scene.setCameraProjection(camera);
 	FrameHandler f = FrameHandler(properties);
 	scene.setCameraZoom(camera, f);
-	glfwSwapInterval(0);
+	glfwSwapInterval(6);
 }
 
 void Project::run()
@@ -56,6 +56,7 @@ void Project::frame_update()
 
 void Project::frame_render()
 {
+	glClearColor(properties.background_color.r, properties.background_color.g, properties.background_color.b, 0);
 	glClear(GL_COLOR_BUFFER_BIT);
 	scene.render();
 }

@@ -8,30 +8,61 @@ void printVector(const std::vector<int>& vec) {
 }
 
 void printVector(const std::vector<Cell>& vec) {
-	for (const Cell& cell: vec) {
+	for (const Cell& cell : vec) {
 		std::cout << "(" << cell.x << ", " << cell.y << ") ";
 	}
 	std::cout << std::endl;
 }
 
-void TruchetTerrain::setup() 
+void TruchetTerrain::setup(std::string&& shaders_path)
 {
-	size.x = 4;
-	size.y = 4;
 
-	board = new Hexagon[size.x * size.y];
-
+	canvas_shader = Shader(shaders_path + "/canvas.vert", shaders_path + "/canvas.frag");
+	generate_canvas_shader = ComputeShader(shaders_path + "/Compute/generateTerrain.comp");
+	size.x = 3;
+	size.y = 3;
+	generateLookupEdges();
 	edges_size = (size.y - 1) * ((size.x * 2 + 1) + (size.x + 1)) + (size.x + 1) + 2 * (size.x * 2);
 	edge_row = size.x * 2;
 	wall = (size.x + 1);
 	railing = (edge_row + 1);
 
+	
 
 	generateCellsIndices();
 	generateDetails();
+
+	resolution.x = 900;
+	resolution.y = 800;
+	glGenTextures(1, &canvas);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, canvas);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, resolution.x, resolution.y, 0, GL_RGBA, GL_FLOAT, NULL);
+	glBindImageTexture(2, canvas, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+
+	glGenBuffers(1, &hex_ids_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, hex_ids_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * hex_ids.size(), &hex_ids[0], GL_DYNAMIC_COPY);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, hex_ids_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+
+	generate_canvas_uniform.resolution = glm::vec2(resolution.x, resolution.y);
+	generate_canvas_uniform.board_size = glm::vec2(size.x, size.y);
+
+	glGenBuffers(1, &generate_canvas_ubo);
+	glBindBuffer(GL_UNIFORM_BUFFER, generate_canvas_ubo);
+	glBufferData(GL_UNIFORM_BUFFER, sizeof(GenerateTerrainUniform), &generate_canvas_uniform, GL_DYNAMIC_COPY);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 1, generate_canvas_ubo);
+	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+	update();
 }
 
-void TruchetTerrain::generateCellsIndices() 
+void TruchetTerrain::generateCellsIndices()
 {
 	generateBoard();
 	Cell current_cell(0, 0);
@@ -76,42 +107,56 @@ void TruchetTerrain::generateCellsIndices()
 			//std::uniform_real_distribution<> rand_id(0, edges_ids.size());
 			number = 0;
 		}
-		
+
 		if (edges_ids.size() == 0) {
 			generateBoard();
-		}
-		addPathToBoard(current_edge_id, edges_ids[number], current_cell);
-		current_edge = edges[edges_ids[number]];
-
-		if (current_edge == finish_edge) { break; }
-
-		if (getCellsFromEdgeId(current_edge).size() > 1) {
-			current_edge_id = 5 - edges_ids[number];
+			current_cell = Cell(0, 0);
+			current_edge = 0;
+			current_edge_id = 0;
 		}
 		else {
-			current_edge_id = edges_ids[number];
-		}
-		if (entrances.contains(current_edge)) {
-			if (current_cell != getCellsFromEdgeId(entrances[current_edge])[0]) {
-				current_cell = getCellsFromEdgeId(entrances[current_edge])[0];
+			addPathToBoard(current_edge_id, edges_ids[number], current_cell);
+			current_edge = edges[edges_ids[number]];
+
+			if (current_edge == finish_edge) { break; }
+
+			if (getCellsFromEdgeId(current_edge).size() > 1) {
+				current_edge_id = 5 - edges_ids[number];
 			}
-			current_edge = entrances[current_edge];
-			for (int i = 0; i < 6; i++) {
-				if (current_edge == (board[current_cell.y * size.x + current_cell.x].edges[i] >> 1)) {
-					current_edge_id = i;
+			else {
+				current_edge_id = edges_ids[number];
+			}
+			if (entrances.contains(current_edge)) {
+				if (current_cell != getCellsFromEdgeId(entrances[current_edge])[0]) {
+					current_cell = getCellsFromEdgeId(entrances[current_edge])[0];
+				}
+				current_edge = entrances[current_edge];
+				for (int i = 0; i < 6; i++) {
+					if (current_edge == (board[current_cell.y * size.x + current_cell.x].edges[i] >> 1)) {
+						current_edge_id = i;
+					}
 				}
 			}
 		}
 	}
+	generateHexIds();
 }
 
-void TruchetTerrain::generateDetails() 
+void TruchetTerrain::generateDetails()
 {
 
 }
 
 void TruchetTerrain::generateBoard()
 {
+	path.clear();
+	entrances.clear();
+	cellEdgesOnGridEdges.clear();
+	board = new Hexagon[size.x * size.y];
+	hex_edges = new HexagonEdges[size.x * size.y];
+	for (int i = 0; i < size.x * size.y; i++) {
+		hex_edges[i] = HexagonEdges();
+	}
 	std::vector<int> tmp;
 	for (int y = 0; y < size.y; y++) {
 		for (int x = 0; x < size.x; x++) {
@@ -209,6 +254,7 @@ void TruchetTerrain::generateBoard()
 			board[c1.y * size.x + c1.x].entrances++;
 		}
 	}
+	delete[] board_edges_indices;
 	//generateCellsIndices();
 	//setBoardTestCase3();
 }
@@ -227,7 +273,7 @@ std::vector<Cell> TruchetTerrain::getCellsFromEdgeId(int id)
 	/*if (!(cell.x < 0 || cell.x > size.x - 1 || cell.y < 0 || cell.y > size.y - 1)) {
 		result.push_back(cell);
 	}*/
-	if (isWall) {	
+	if (isWall) {
 		if (cell.x < size.x) {
 			result.push_back(cell);
 		}
@@ -304,7 +350,7 @@ std::vector<Cell> TruchetTerrain::getCellsFromEdgeId(int id)
 					}
 				}
 			}
-			
+
 		}
 	}
 	//printVector(result);
@@ -339,7 +385,8 @@ std::vector<int> TruchetTerrain::getEdgeNeighboursFromEdgeId(int id, Cell& curre
 				neighbours.insert(neighbours.end(), tmp.begin(), tmp.end());
 			}
 		}
-	} else {
+	}
+	else {
 		tmp = getEdgesFromCellId(cells[0]);
 		neighbours.insert(neighbours.end(), tmp.begin(), tmp.end());
 	}
@@ -382,7 +429,7 @@ std::vector<int> TruchetTerrain::getEdgesFromCellId(Cell cell)
 	else {
 		neighbours.push_back(edge_row + cell.y * (wall + railing) - railing + cell.x * 2);
 		neighbours.push_back(edge_row + cell.y * (wall + railing) - railing + cell.x * 2 + 1);
-		
+
 		neighbours.push_back(edge_row + cell.y * (wall + railing) + cell.x);
 		neighbours.push_back(edge_row + cell.y * (wall + railing) + cell.x + 1);
 
@@ -412,6 +459,7 @@ bool TruchetTerrain::isValidEdge(int edge, Cell current_cell, std::set<Cell>& pr
 	}
 	//when you dont have option to return to cell but this edge is leaving
 	if (is_first && (current_cell.x == 0 || current_cell.x == size.x - 1 || current_cell.y == 0 || current_cell.y == size.y - 1) && current_cell != Cell(0, 0)) {
+		std::cout << 1.5 << ' ';
 		if (board[current_cell.y * size.x + current_cell.x].entrances < 3) {
 			int options_count = 0;
 			for (int i = 0; i < 6; i++) {
@@ -425,6 +473,7 @@ bool TruchetTerrain::isValidEdge(int edge, Cell current_cell, std::set<Cell>& pr
 						return true;
 					}
 				}
+				std::cout << 1.7 << ' ';
 				return false;
 			}
 		}
@@ -465,6 +514,25 @@ bool TruchetTerrain::isValidEdge(int edge, Cell current_cell, std::set<Cell>& pr
 					return false;
 				}
 			}
+		}
+		std::cout << 1.7 << ' ';
+		int options_count = 0;
+		for (int i = 0; i < 6; i++) {
+			if (!(board[current_cell.y * size.x + current_cell.x].edges[i] % 2)) {
+				options_count++;
+			}
+		}
+		std::cout << " xx " << options_count << ' ';
+		if (options_count > 2) {
+			if (edge == 0) {
+				return false;
+			}
+			if (entrances.contains(edge)) {
+				if (getCellsFromEdgeId(entrances[edge])[0] == current_cell) {
+					return true;
+				}
+			}
+			return false;
 		}
 		std::cout << 4 << ' ';
 		return true;
@@ -507,6 +575,24 @@ bool TruchetTerrain::isValidEdge(int edge, Cell current_cell, std::set<Cell>& pr
 
 void TruchetTerrain::addPathToBoard(int edge1, int edge2, Cell cell)
 {
+	for (int i = 0; i < 3; i++) {
+		if (hex_edges[cell.y * size.x + cell.x].edges[i] == INT_MAX) {
+			if (edge1 < edge2) {
+				hex_edges[cell.y * size.x + cell.x].edges[i].x = edge1;
+				hex_edges[cell.y * size.x + cell.x].edges[i].y = edge2;
+			}
+			else {
+				hex_edges[cell.y * size.x + cell.x].edges[i].x = edge2;
+				hex_edges[cell.y * size.x + cell.x].edges[i].y = edge1;
+			}
+			if (i == 2) {
+				hex_edges[cell.y * size.x + cell.x].generate_id();
+			}
+			break;
+		}
+	}
+	cells_path.push_back(cell);
+	//path[edge1] = edge2;
 	path[board[cell.y * size.x + cell.x].edges[edge1] >> 1] = board[cell.y * size.x + cell.x].edges[edge2] >> 1;
 	board[cell.y * size.x + cell.x].edges[edge1] |= 0x01;
 	board[cell.y * size.x + cell.x].edges[edge2] |= 0x01;
@@ -531,10 +617,76 @@ void TruchetTerrain::addPathToBoard(int edge1, int edge2, Cell cell)
 	}
 }
 
+void TruchetTerrain::generateHexIds()
+{
+	/*int it = 0;
+	for (auto pair : path) {
+		int first_edge = pair.first;
+		int second_edge = pair.second;
+		Cell cell = cells_path[it];
+		for (int i = 0; i < 3; i++) {
+			if (hex_ids[cell.y * size.x + cell.x].edges[i] == INT_MAX) {
+				if (first_edge < second_edge) {
+					hex_ids[cell.y * size.x + cell.x].edges[i].x = first_edge;
+					hex_ids[cell.y * size.x + cell.x].edges[i].y = second_edge;
+				}
+				else {
+					hex_ids[cell.y * size.x + cell.x].edges[i].x = first_edge;
+					hex_ids[cell.y * size.x + cell.x].edges[i].y = second_edge;
+				}
+				if (i == 2) {
+					hex_ids[cell.y * size.x + cell.x].generate_id();
+				}
+			}
+		}
+		it++;
+	}*/
+	for (int y = 0; y < size.y; y++) {
+		for (int x = 0; x < size.x; x++) {
+			if (lookup_edges.contains(hex_edges[y * size.x + x])) {
+				std::cout << lookup_edges[hex_edges[y * size.x + x]] << " ";
+				hex_ids.push_back(lookup_edges[hex_edges[y * size.x + x]]);
+			}
+			else {
+				int aniedziala = 2;
+			}
+		}
+		std::cout << '\n';
+	}
+}
+
+void TruchetTerrain::generateLookupEdges()
+{
+	//have 0 straight lines
+	lookup_edges[HexagonEdges(Cell(0, 1), Cell(2, 4), Cell(3, 5))] = (0 << 2) | 0x00;
+	lookup_edges[HexagonEdges(Cell(0, 2), Cell(1, 3), Cell(4, 5))] = (1 << 2) | 0x00;
+
+	lookup_edges[HexagonEdges(Cell(0, 4), Cell(1, 2), Cell(3, 5))] = (2 << 2) | 0x00;
+	lookup_edges[HexagonEdges(Cell(0, 3), Cell(1, 2), Cell(4, 5))] = (3 << 2) | 0x00;
+	lookup_edges[HexagonEdges(Cell(0, 3), Cell(1, 5), Cell(2, 4))] = (4 << 2) | 0x00;
+	lookup_edges[HexagonEdges(Cell(0, 2), Cell(1, 5), Cell(3, 4))] = (5 << 2) | 0x00;
+	lookup_edges[HexagonEdges(Cell(0, 1), Cell(2, 5), Cell(3, 4))] = (6 << 2) | 0x00;
+	lookup_edges[HexagonEdges(Cell(0, 4), Cell(1, 3), Cell(2, 5))] = (7 << 2) | 0x00;
+
+	//have once straight line
+	lookup_edges[HexagonEdges(Cell(0, 1), Cell(2, 3), Cell(4, 5))] = (0 << 2) | 0x01;
+	lookup_edges[HexagonEdges(Cell(0, 2), Cell(1, 4), Cell(3, 5))] = (1 << 2) | 0x01;
+	lookup_edges[HexagonEdges(Cell(0, 5), Cell(1, 3), Cell(2, 4))] = (2 << 2) | 0x01;
+	
+	lookup_edges[HexagonEdges(Cell(0, 4), Cell(1, 5), Cell(2, 3))] = (3 << 2) | 0x01;
+	lookup_edges[HexagonEdges(Cell(0, 5), Cell(1, 2), Cell(3, 4))] = (4 << 2) | 0x01;
+	lookup_edges[HexagonEdges(Cell(0, 3), Cell(1, 4), Cell(2, 5))] = (5 << 2) | 0x01;
+	
+	//have 3 straight lines
+	lookup_edges[HexagonEdges(Cell(0, 5), Cell(1, 4), Cell(2, 3))] = (0 << 2) | 0x3;
+	
+	
+}
+
 void TruchetTerrain::printBoard() {
 	for (int y = 0; y < size.y; y++) {
 		for (int x = 0; x < size.x; x++) {
-			std::cout << "(" << x << ", " << y << ") -> " << board[y * size.x + x].entrances<<" edges: ";
+			std::cout << "(" << x << ", " << y << ") -> " << board[y * size.x + x].entrances << " edges: ";
 			for (int i = 0; i < 6; i++) {
 				if (!(board[y * size.x + x].edges[i] % 2)) {
 					std::cout << (board[y * size.x + x].edges[i] >> 1) << " ";
@@ -735,5 +887,53 @@ void TruchetTerrain::setBoardTestCase3()
 		}
 	}
 	printBoard();
+}
+
+void TruchetTerrain::update()
+{
+	generate_canvas_shader.use();
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, hex_ids_ssbo);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 1, generate_canvas_ubo);
+	glBindImageTexture(2, canvas, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+	glDispatchCompute((resolution.x - 1) / 10 + 1, (resolution.y - 1) / 10 + 1, 1);
+	glMemoryBarrier(GL_ALL_BARRIER_BITS);
+}
+
+void TruchetTerrain::draw()
+{
+	canvas_shader.use();
+	unsigned int quadvao = 0, quadvbo = 0;
+	if (quadvao == 0) {
+		float quadVertices[] = {
+			// positions  // texture Coords
+			-1.0f,  1.0f, 0.0f, 1.0f,
+			-1.0f, -1.0f, 0.0f, 0.0f,
+			 1.0f,  1.0f, 1.0f, 1.0f,
+			 1.0f, -1.0f, 1.0f, 0.0f,
+		};
+		// setup plane VAO
+		glGenVertexArrays(1, &quadvao);
+		glGenBuffers(1, &quadvbo);
+		glBindVertexArray(quadvao);
+		glBindBuffer(GL_ARRAY_BUFFER, quadvbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+	}
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, canvas);
+	glBindVertexArray(quadvao);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+void TruchetTerrain::reloadShader(std::string&& path)
+{
+	canvas_shader = Shader(path + "/canvas.vert", path + "/canvas.frag");
+	generate_canvas_shader = ComputeShader(path + "/Compute/generateTerrain.comp");
+	update();
+	update();
 }
 

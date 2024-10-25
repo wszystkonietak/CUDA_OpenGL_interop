@@ -3,11 +3,16 @@
 #include "Project.hpp"
 #include "FrameHandler.hpp"
 #include "FunctionWrapper.hpp"
-
+#include <thread>
+#include <atomic>
 
 class Callbacks {
 public:
 	Callbacks(Project& project);
+	~Callbacks() {
+		consoleThread.detach();
+	}
+	static void consoleInputCallback(Project& project);
 	static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 	static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 	static void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos);
@@ -20,4 +25,5 @@ private:
 	Project& project;
 	Properties properties;
 	FrameHandler input;
+	std::thread consoleThread;
 };
