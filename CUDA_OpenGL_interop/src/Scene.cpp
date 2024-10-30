@@ -18,6 +18,11 @@ void Scene::load(const std::string& project_path)
 	loadTerrain();
 }
 
+void Scene::reload()
+{
+	loadTerrain();
+}
+
 void Scene::updateShaders(OrthographicCamera& camera)
 {
 	shaders[s_Basic].use();

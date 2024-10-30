@@ -15,6 +15,7 @@ public:
 	Scene() {}
 	Scene(std::vector<SoftBody> softBodies, std::vector<Shader> shaders);
 	void load(const std::string& project_path);
+	void reload();
 	void render();
 	void setCameraZoom(const OrthographicCamera& camera, FrameHandler& input);
 	void setCameraProjection(const OrthographicCamera& camera);

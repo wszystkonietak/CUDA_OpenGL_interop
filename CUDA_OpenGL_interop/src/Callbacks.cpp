@@ -3,7 +3,7 @@
 Callbacks::Callbacks(Project& project) : project(project), input(project.properties)
 {
 	properties = project;
-	consoleThread = std::thread(consoleInputCallback, std::ref(project));
+	//consoleThread = std::thread(consoleInputCallback, std::ref(project));
 	/*responses[MouseHandler(scroll_up)].push_back([&](FrameHandler& input) {project.camera.zoomIn(input); });*/
 	glfwSetFramebufferSizeCallback(project, framebufferSizeCallback);
 	glfwSetKeyCallback(project, keyCallback);
@@ -60,6 +60,10 @@ void Callbacks::keyCallback(GLFWwindow* window, int key, int scancode, int actio
 	Callbacks* state = static_cast<Callbacks*>(glfwGetWindowUserPointer(window));
 	if (key == GLFW_KEY_ENTER && action == GLFW_PRESS && (mods & GLFW_MOD_ALT)) {
 		state->project.scene.reloadShaders();
+		return;
+	}
+	if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
+		state->project.scene.reload();
 		return;
 	}
 }

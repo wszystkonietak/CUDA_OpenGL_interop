@@ -16,18 +16,16 @@ void printVector(const std::vector<Cell>& vec) {
 
 void TruchetTerrain::setup(std::string&& shaders_path)
 {
-
+	str = shaders_path;
 	canvas_shader = Shader(shaders_path + "/canvas.vert", shaders_path + "/canvas.frag");
 	generate_canvas_shader = ComputeShader(shaders_path + "/Compute/generateTerrain.comp");
-	size.x = 3;
-	size.y = 3;
+	size.x = 4;
+	size.y = 4;
 	generateLookupEdges();
 	edges_size = (size.y - 1) * ((size.x * 2 + 1) + (size.x + 1)) + (size.x + 1) + 2 * (size.x * 2);
 	edge_row = size.x * 2;
 	wall = (size.x + 1);
 	railing = (edge_row + 1);
-
-	
 
 	generateCellsIndices();
 	generateDetails();
@@ -46,7 +44,7 @@ void TruchetTerrain::setup(std::string&& shaders_path)
 
 	glGenBuffers(1, &hex_ids_ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, hex_ids_ssbo);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(int) * hex_ids.size(), &hex_ids[0], GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(HexagonData) * hex_ids.size(), &hex_ids[0], GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, hex_ids_ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
@@ -152,6 +150,7 @@ void TruchetTerrain::generateBoard()
 	path.clear();
 	entrances.clear();
 	cellEdgesOnGridEdges.clear();
+	cells_path.clear();
 	board = new Hexagon[size.x * size.y];
 	hex_edges = new HexagonEdges[size.x * size.y];
 	for (int i = 0; i < size.x * size.y; i++) {
@@ -645,13 +644,126 @@ void TruchetTerrain::generateHexIds()
 		for (int x = 0; x < size.x; x++) {
 			if (lookup_edges.contains(hex_edges[y * size.x + x])) {
 				std::cout << lookup_edges[hex_edges[y * size.x + x]] << " ";
-				hex_ids.push_back(lookup_edges[hex_edges[y * size.x + x]]);
+				hex_ids.push_back(HexagonData(lookup_edges[hex_edges[y * size.x + x]]));
 			}
 			else {
 				int aniedziala = 2;
 			}
 		}
 		std::cout << '\n';
+	}
+	int edges_data_size = size.x + size.y + (size.x - 1) + size.y;
+	edges_data.resize(edges_data_size, 0);
+	for (int i = 0; i < hex_ids.size(); i++) {
+		hex_ids[i].flip_y[0] = 0;
+		hex_ids[i].flip_y[1] = 0;
+		hex_ids[i].flip_y[2] = 0;
+	}
+	int next_edge = path[0];
+	int current = 0;
+	int edge1 = 0;
+	int edge2 = 0;
+	int edge_id = 0;
+	int prev_edge = -1;
+	int min_edge_id = 100;
+	int it = 0;
+	bool toCenter = false;
+	bool bottomEntry = false;
+	std::vector<int> edges;
+	std::vector<int> chenge_edge_id = { 0, 1, 5, 2, 4, 3 };
+	while (it < cells_path.size()) {
+		edges = getEdgesFromCellId(cells_path[it]);
+		for (int i = 0; i < edges.size(); i++) {
+			if (current == edges[i]) {
+				edge1 = i;
+			}
+			if (next_edge == edges[i]) {
+				edge2 = i;
+				edge_id = i;
+			}
+		}
+		//toCenter = false;
+		bottomEntry = edge1 > 2;
+		min_edge_id = std::min(edge1, edge2);
+		edge1 = chenge_edge_id[edge1];
+		edge2 = chenge_edge_id[edge2];
+		edge2 = (edge2 + (6 - edge1)) % 6;
+		edge1 = (edge1 + (6 - edge1)) % 6;
+		if (prev_edge != -1) {
+			if (prev_edge == 3) {
+				if ((bottomEntry && edge2 > 3) || (!bottomEntry && edge2 < 3)) {
+					toCenter = !toCenter;
+				}
+			}
+			else
+			if (edge2 == 3) {
+				if ((prev_edge < 3 && !bottomEntry) || (prev_edge > 2 && bottomEntry)) {
+					toCenter = !toCenter;
+				}
+			} else
+			if (abs(prev_edge - edge2) > 1) {
+				toCenter = !toCenter;
+			}
+			 /*else if (prev_edge == 3) {
+				if ((bottomEntry && edge2 > 3) || (!bottomEntry && edge2 < 3)) {
+					toCenter = !toCenter;
+				}
+			} else if (abs(prev_edge - edge2) > 1) {
+				toCenter = !toCenter;
+			}*/
+		}
+		HexagonEdges h_edges = hex_edges[cells_path[it].y * size.x + cells_path[it].x];
+		if (lookup_edges[h_edges] == ((0 << 2) | 0x3)) {
+			hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[min_edge_id] = float(toCenter);
+		}
+		else {
+			if (edge2 == 3) {
+				hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[0] = float(toCenter);
+			}
+			else if ((lookup_edges[hex_edges[cells_path[it].y * size.x + cells_path[it].x]] & 0b11) == 1) {
+				if (h_edges.edges[0].x == min_edge_id) {
+					hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[1] = float(toCenter);
+				}
+				else if ((h_edges.edges[1].x == min_edge_id) && (h_edges.edges[0].x + h_edges.edges[0].y) == 5) {
+					hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[1] = float(toCenter);
+				}
+				else {
+					hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[2] = float(toCenter);
+				}
+			}
+			else {
+				for (int i = 0; i < 3; i++) {
+					if (min_edge_id == hex_edges[cells_path[it].y * size.x + cells_path[it].x].edges[i].x) {
+						hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[i] = float(toCenter);
+					}
+				}
+			}
+		}
+
+		if (path.contains(next_edge)) {
+			current = next_edge;
+			next_edge = path[next_edge];
+		}
+		else {
+			current = entrances[next_edge];
+			next_edge = path[current];
+			if (cells_path[it].y == 0) {
+				if (edge_id == 2) {
+					edges_data[edges_data_size - 1] = float(toCenter);
+				}
+				else if (edge_id == 3) {
+					edges_data[size.x] = float(toCenter);
+				}
+				else {
+					edges_data[cells_path[it].x] = float(toCenter);
+				}
+			} else 
+			if (cells_path[it].x == size.x) {
+				
+			}
+		}
+		prev_edge = edge2;
+		it++;
 	}
 }
 
@@ -679,8 +791,6 @@ void TruchetTerrain::generateLookupEdges()
 	
 	//have 3 straight lines
 	lookup_edges[HexagonEdges(Cell(0, 5), Cell(1, 4), Cell(2, 3))] = (0 << 2) | 0x3;
-	
-	
 }
 
 void TruchetTerrain::printBoard() {
@@ -901,8 +1011,8 @@ void TruchetTerrain::update()
 
 void TruchetTerrain::draw()
 {
+	reloadShader(str + "");
 	canvas_shader.use();
-	unsigned int quadvao = 0, quadvbo = 0;
 	if (quadvao == 0) {
 		float quadVertices[] = {
 			// positions  // texture Coords
@@ -929,10 +1039,10 @@ void TruchetTerrain::draw()
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
-void TruchetTerrain::reloadShader(std::string&& path)
+void TruchetTerrain::reloadShader(std::string&& src)
 {
-	canvas_shader = Shader(path + "/canvas.vert", path + "/canvas.frag");
-	generate_canvas_shader = ComputeShader(path + "/Compute/generateTerrain.comp");
+	canvas_shader = Shader(src + "/canvas.vert", src + "/canvas.frag");
+	generate_canvas_shader = ComputeShader(src + "/Compute/generateTerrain.comp");
 	update();
 	update();
 }

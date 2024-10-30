@@ -1,18 +1,30 @@
 #version 430 core
 
+#define PI   3.141592654    // PI
 #define R3   1.732050807	// square root of 3
 #define HR3  0.866025404	// half square root of 3
 #define IR3  0.577350269 	// the inverse of the square root of 3
 #define HIR3 0.288675134	// half the inverse of the square root of 3
+#define I3   0.333333333	// 1/3
+#define I6   0.166666666	// 1/6
 
+float w = 0.01, r = 1.;
 
 const vec2 s = vec2(1, 1.7320508);
 
 layout (local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
+struct Hexagon {
+    int id;
+    float flip_y[3];
+	float flip_x[3];
+	float offset_x[3];
+	float multiply_x[3];
+};
+
 layout(std430, binding = 0) buffer HexagonIds
 {
-    int hex_ids[];
+    Hexagon hex_ids[];
 };
 
 layout(std140, binding = 1) uniform CanvasUniform
@@ -23,113 +35,163 @@ layout(std140, binding = 1) uniform CanvasUniform
 
 layout(rgba32f, binding = 2) uniform image2D imgOutput;
 
-mat3 circlesLookUp[] = {
+mat3x4 circlesLookUp[] = {
         //center  radius
-    mat3(
-        -0.5, -HIR3, HIR3,
-        0.0, IR3, HIR3,
-        0.5, -HIR3, HIR3
+    mat3x4(
+        0.0, IR3, HIR3, -2*I3*PI,
+        -0.5, -HIR3, HIR3, 0,
+        0.5, -HIR3, HIR3, -4*I3*PI
     ),
-    mat3(
-        -0.5, HIR3, HIR3,
-        0.0, -IR3, HIR3,
-        0.5, HIR3, HIR3
+    mat3x4(
+        -0.5, HIR3, HIR3, -I3*PI,
+        0.5, HIR3, HIR3, -PI,
+        0.0, -IR3, HIR3, I3*PI
     ),
-    mat3(
-        -0.5, HR3, 1.5*IR3,
-        -1., 0, 1.5*IR3,
-        0.5, -HIR3, HIR3
+    mat3x4(
+        -1., 0, 1.5*IR3, -I3 * PI,
+        -0.5, HR3, 1.5*IR3, -2.*I3*PI,
+        0.5, -HIR3, HIR3, -4*I3*PI
     ),
-    mat3(
-        -0.5, HR3, 1.5*IR3,
-        0.5, HR3, 1.5*IR3,
-        0, -IR3, HIR3
+    mat3x4(
+        0.5, HR3, 1.5*IR3, -3.*I3*PI,
+        -0.5, HR3, 1.5*IR3, -2.*I3*PI,
+        0, -IR3, HIR3, I3*PI
     ),
-    mat3(
-        1.0, 0.0, 1.5*IR3,
-        0.5, HR3, 1.5*IR3,
-        -0.5, -HIR3, HIR3
+    mat3x4(
+        0.5, HR3, 1.5*IR3, -3.*I3*PI,
+        1.0, 0.0, 1.5*IR3, -4.*I3 * PI,
+        -0.5, -HIR3, HIR3,0
     ),
-    mat3(
-        1.0, 0.0, 1.5*IR3,
-        0.5, -HR3, 1.5*IR3,
-        -0.5, IR3*0.5, HIR3
+    mat3x4(
+        -0.5, IR3*0.5, HIR3, -I3*PI,
+        1.0, 0.0, 1.5*IR3, -4.*I3 * PI,
+        0.5, -HR3, 1.5*IR3, -5.*I3 * PI
     ),
-    mat3(
-        -0.5, -HR3, 1.5*IR3,
-        0.5, -HR3, 1.5*IR3,
-        0., IR3, HIR3
+    mat3x4(
+        0., IR3, HIR3, -2*I3*PI,
+        -0.5, -HR3, 1.5*IR3, 0,
+        0.5, -HR3, 1.5*IR3, -5.*I3 * PI
     ),
-    mat3(
-        -0.5, -HR3, 1.5*IR3,
-        -1.0, 0., 1.5*IR3,
-        0.5, IR3 * 0.5, HIR3
+    mat3x4(
+        -1.0, 0., 1.5*IR3, -I3 * PI,
+        0.5, IR3 * 0.5, HIR3, -PI,
+        -0.5, -HR3, 1.5*IR3, 0
     )
 };
 
 mat3x4 mixLookUp[] = {
     mat3x4(
         -0.5, 0, 0.5, 0,
-        0.0, -IR3 , HIR3, 0,
-        0.0, IR3, HIR3, 0
+        0.0, IR3, HIR3, -2*I3*PI,
+        0.0, -IR3, HIR3, I3*PI
     ),
     mat3x4(
         0.25, IR3 * 0.75, -0.25, -IR3 * 0.75,
-        -0.5, HIR3 , HIR3, 0,
-        0.5, -HIR3, HIR3, 0
+        -0.5, HIR3, HIR3, -I3*PI,
+        0.5, -HIR3, HIR3, -4*I3*PI
     ),  
     mat3x4(
         -0.25, IR3 * 0.75, 0.25, -IR3 * 0.75,
-        0.5, HIR3 , HIR3, 0,
+        0.5, HIR3 , HIR3, 0-PI,
         -0.5, -HIR3, HIR3, 0
     ),  
     mat3x4(
         -0.5, 0., 0.5, 0.,
-        -1., 0., 1.5 * IR3, 0,
-        1., 0., 1.5 * IR3, 0
+        -1., 0., 1.5 * IR3, -I3 * PI,
+        1., 0., 1.5 * IR3, -4.*I3 * PI
     ),
     mat3x4(
         -0.25, IR3 * 0.75, 0.25, -IR3 * 0.75,
-        0.5, -HR3, 1.5 * IR3, 0,
-        -0.5, HR3, 1.5 * IR3, 0
+        -0.5, HR3, 1.5*IR3, -2.*I3*PI,
+        0.5, -HR3, 1.5*IR3, -5.*I3 * PI
     ),
     mat3x4(
         0.25, IR3 * 0.75, -0.25, -IR3 * 0.75,
-        -0.5, -HR3, 1.5 * IR3, 0,
-        0.5, HR3, 1.5 * IR3, 0
+        0.5, HR3, 1.5*IR3, -3.*I3*PI,
+        -0.5, -HR3, 1.5 * IR3, 0
     ),
 };
 
-float hash21(vec2 p)
-{
+float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(141.13, 289.97)))*43758.5453);
 }
 
-vec2 circle(float l, float d, float w, float r) {
-    w*=10;
-    float x = 0.;
-    float y = step(abs(l - d), w);// * abs((l - d + w) / (2. * w) - r);
-    y = (l - d + w) * 0.5/w * step(abs(l - d), w);
-    //y = step(y, 10.01);
+vec2 edge_circle(vec2 uv, int hex_id, int curve_id, float edge_id, int size) {
+    vec2 c = vec2(circlesLookUp[hex_id][curve_id][0], circlesLookUp[hex_id][curve_id][1]);
+    float r = circlesLookUp[hex_id][curve_id][2];
+    float l = length(uv - c);
+    //float y = abs(((l - r + w) * 0.5/w)) * step(abs(l - r), w);
+    float y = edge_id / float(size) * step(abs(l - r), w);
+    float angle = (atan(uv.x - c.x, uv.y - c.y) + circlesLookUp[hex_id][curve_id][3]);
+    angle = mod(angle, 2.0 * PI); 
+    angle /= (2.0 * PI); 
+    float x = step(abs(l - r), w) * angle;
+    return vec2(x, y);
+}
+
+vec2 circle(vec2 uv, Hexagon hex, int curve_id) {    
+    vec2 c = vec2(circlesLookUp[hex.id][curve_id][0], circlesLookUp[hex.id][curve_id][1]);
+    float r = circlesLookUp[hex.id][curve_id][2];
+    float l = length(uv - c);
+    float y = abs(hex.flip_y[curve_id] - ((l - r + w) * 0.5/w)) * step(abs(l - r), w);
+    float angle = (atan(uv.x - c.x, uv.y - c.y) + circlesLookUp[hex.id][curve_id][3]);
+    angle = mod(angle, 2.0 * PI); 
+    angle /= (2.0 * PI); 
+    float x = step(abs(l - r), w) * angle;
+    return vec2(x, y);
+}
+
+vec2 circle_mix(vec2 uv, Hexagon hex, int curve_id) {    
+    vec2 c = vec2(mixLookUp[hex.id][curve_id][0], mixLookUp[hex.id][curve_id][1]);
+    float r = mixLookUp[hex.id][curve_id][2];
+    float l = length(uv - c);
+    float y = abs(hex.flip_y[curve_id] - ((l - r + w) * 0.5/w)) * step(abs(l - r), w);
+
+    float angle = (atan(uv.x - c.x, uv.y - c.y) + mixLookUp[hex.id][curve_id][3]);
+    angle = mod(angle, 2.0 * PI); 
+    angle /= (2.0 * PI); 
+    float x = step(abs(l - r), w) * angle;
     
     return vec2(x, y);
 }
 
-float line(vec2 p1, vec2 p2, vec2 u) {
+vec2 line(vec2 p1, vec2 p2, vec2 u, Hexagon hex, int id = 0) {
+    vec2 uv;
     float a = p1.y-p2.y;
     float b = p2.x-p1.x;
-    return abs(a*u.x+b*u.y+p1.x*p2.y-p2.x*p1.y) / sqrt(a*a+b*b);
+    float d = (a*u.x+b*u.y+p1.x*p2.y-p2.x*p1.y) / sqrt(a*a+b*b);
+    float m = step(abs(d), w);
+    uv.x = m * dot(p2 - p1, u - p1);
+    uv.y = ((d + w) * (1./(2.*w)));
+    uv.y = abs(hex.flip_y[id] - uv.y) * m;
+    return uv;
 }
 
-float hex(in vec2 p)
-{    
+vec2 circlesHex(vec2 p, Hexagon data) {
+    vec2 uv;
+    data.id>>=2;
+    uv=circle(p, data, 0);
+    uv+=circle(p, data, 1);
+    uv+=circle(p, data, 2);
+    return uv;
+}
+
+vec2 mixHex(vec2 p, Hexagon data) {
+    vec2 uv;
+    data.id>>=2;
+    uv = line(vec2(mixLookUp[data.id][0][0], mixLookUp[data.id][0][1]), vec2(mixLookUp[data.id][0][2], mixLookUp[data.id][0][3]), p, data);
+    uv+=circle_mix(p, data, 1);
+    uv+=circle_mix(p, data, 2);
+    return uv;    
+}
+
+float hex(in vec2 p) {    
     p = abs(p);
 
     return max(dot(p, s*.5), p.x);   
 }
 
-vec4 getHex(vec2 p)
-{    
+vec4 getHex(vec2 p) {    
     vec4 hC = floor(vec4(p, p - vec2(.5, 1))/s.xyxy) + .5;
     
     vec4 h = vec4(p - hC.xy*s, p - (hC.zw + .5)*s);
@@ -141,7 +203,7 @@ vec4 getHex(vec2 p)
 
 void main() {
     vec2 u = vec2(0);
-    
+    w*=10;
     u.y = gl_GlobalInvocationID.y / 800.;
     u.x = (gl_GlobalInvocationID.x - 50.)/800.;
     vec2 len = vec2((0.5 * board_size.y * R3 + HR3), (board_size.x + 0.5));
@@ -176,50 +238,67 @@ void main() {
     h.w *= 2.0;
     h.w = -1.*(h.w - board_size.y + 1);
     h.w += offset;
-    float w = 0.01;
-    float r = 1., c = 0.;
+    
+    vec2 c = vec2(0.);
+//    col = mix(vec3(0.), vec3(1), smoothstep(0., .03, eDist - .5 + .04));    
     if(h.z >= 0. && h.w >= 0. && h.z < board_size.x && h.w < board_size.y) {
         
-        int id = hex_ids[int(h.w * board_size.x + h.z)];
+        Hexagon data = hex_ids[int(h.w * board_size.x + h.z)];
         
-        if((id & 0x3) == 0) {
-            mat3 cell = circlesLookUp[id >> 2];
-            c += circle(length(h.xy-vec2(cell[0][0], cell[0][1])), cell[0][2], w, r).y;
-            c += circle(length(h.xy-vec2(cell[1][0], cell[1][1])), cell[1][2], w, r).y;
-            c += circle(length(h.xy-vec2(cell[2][0], cell[2][1])), cell[2][2], w, r).y;
-        } else if ((id & 0x3) == 1) {
-            mat3x4 cell = mixLookUp[id >> 2];
-            c = step(line(vec2(cell[0][0], cell[0][1]), vec2(cell[0][2], cell[0][3]), h.xy), w);
-            c += circle(length(h.xy-vec2(cell[1][0], cell[1][1])), cell[1][2], w, r).y;
-            c += circle(length(h.xy-vec2(cell[2][0], cell[2][1])), cell[2][2], w, r).y;
+        if((data.id & 0x3) == 0) {
+            c += circlesHex(h.xy, data);
+        } else if ((data.id & 0x3) == 1) {
+            c+=mixHex(h.xy, data);
         } else {
-            c += step(line(vec2(0.25, IR3 * 0.75), vec2(-0.25, -IR3 * 0.75), h.xy), w);  
-            c += step(line(vec2(-0.25, IR3 * 0.75), vec2(0.25, -IR3 * 0.75), h.xy), w);  
-            c += step(line(vec2(-0.5, 0.), vec2(0.5, 0.), h.xy), w);   
+            c += line(vec2(-0.25, IR3 * 0.75), vec2(0.25, -IR3 * 0.75), h.xy, data, 0);  
+            c += line(vec2(0.25, IR3 * 0.75), vec2(-0.25, -IR3 * 0.75), h.xy, data, 1);  
+            c += line(vec2(-0.5, 0.), vec2(0.5, 0.), h.xy, data, 2);
         }
-        //col = mix(vec3(0.), vec3(1), smoothstep(0., .03, eDist - .5 + .04));    
-        col += vec3(c);
+        col += vec3(0,c.y, 0);
     } else {
-        //col = mix(vec3(0.), vec3(1), smoothstep(0., .03, eDist - .5 + .04));    
-        mat3 cell = circlesLookUp[0];
-        if(h.w == -1. && h.z < board_size.x) {
-            c += circle(length(h.xy-vec2(cell[0][0], cell[0][1])), cell[0][2], w, r).y;
-            c += circle(length(h.xy-vec2(cell[2][0], cell[2][1])), cell[2][2], w, r).y;
+        float id1 = 100;
+        float id2 = 100;
+        int edges_size = int(board_size.x + board_size.y + (board_size.x - 1.) + board_size.y);
+        if(h.w == -1) {
+            id1 = h.z;
+            id2 = h.z + 1;
+            if(id1 > -1 && id1 < board_size.x) {
+                c += edge_circle(h.xy, 0, 1, id1, edges_size);
+            }
+            if(id2 > -1 && id2 < board_size.x) {
+                c += edge_circle(h.xy, 0, 2, id2, edges_size);
+            }
+        } else if(h.z == board_size.x) {
+            id1 = board_size.x + h.w;
+            if(h.w > -1 && h.w < board_size.y) {
+                c += edge_circle(h.xy, 0, 1, id1, edges_size);
+                if(mod(h.w, 2.) == 0. && h.w != 0.) {
+                    c += edge_circle(h.xy, 0, 0, id1 - 1, edges_size);    
+                }
+            }
+            if(h.w == board_size.y) {
+                c += edge_circle(h.xy, 0, 0, id1 - 1, edges_size);
+            }
+        } else if(h.w == board_size.y) {
+            id1 = board_size.x + board_size.y;
+            if(h.z < board_size.x && h.z > -1) {
+                c += edge_circle(h.xy, 0, 0, id1 + (board_size.x - h.z) - 1, edges_size);                    
+            }
+        } else if(h.z == -1) {
+            id1 = board_size.x + board_size.y + board_size.x;
+            if(h.w > -1 && h.w < board_size.y) {
+                c += edge_circle(h.xy, 0, 2, id1 + (board_size.y - (h.w + 1)) -1., edges_size);   
+                if(mod(h.w, 2.) == 1. && h.w != 0.) {
+                    c += edge_circle(h.xy, 0, 0, id1 + (board_size.y - (h.w + 1)), edges_size);    
+                }
+            }
         }
-        if(h.z == board_size.x) {
-            c += circle(length(h.xy-vec2(cell[0][0], cell[0][1])), cell[0][2], w, r).y;
-            c += circle(length(h.xy-vec2(cell[1][0], cell[1][1])), cell[1][2], w, r).y;
+        if(c.y == 14./edges_size) {
+            c.y=1.0;
+        } else {
+            c.y = 0.;
         }
-        if(h.w == board_size.y) {
-            c += circle(length(h.xy-vec2(cell[1][0], cell[1][1])), cell[1][2], w, r).y;
-        }
-        if(h.z == -1) {
-            c += circle(length(h.xy-vec2(cell[0][0], cell[0][1])), cell[0][2], w, r).y;
-            c += circle(length(h.xy-vec2(cell[1][0], cell[1][1])), cell[1][2], w, r).y;
-            c += circle(length(h.xy-vec2(cell[2][0], cell[2][1])), cell[2][2], w, r).y;
-        }
-        //c = circle(length(h.xy-vec2(cell[0][0], cell[0][1])), cell[0][2], w, r).y;
-        col += vec3(c, 0, 0);
+        col += vec3(0, c.y, 0);
     }
     
     if(abs(uv.x - 1.) < 0.005 || abs(uv.x) < 0.005) {

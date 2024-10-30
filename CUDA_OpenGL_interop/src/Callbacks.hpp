@@ -10,7 +10,7 @@ class Callbacks {
 public:
 	Callbacks(Project& project);
 	~Callbacks() {
-		consoleThread.detach();
+		//consoleThread.detach();
 	}
 	static void consoleInputCallback(Project& project);
 	static void framebufferSizeCallback(GLFWwindow* window, int width, int height);

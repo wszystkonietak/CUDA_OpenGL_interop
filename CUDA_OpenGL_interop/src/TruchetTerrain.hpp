@@ -12,8 +12,24 @@
 #include <map>
 #include <set>
 #include <unordered_map>
-#include <cmath>
+#include <math.h>
 #include <glm/glm.hpp>
+
+struct HexagonData {
+	HexagonData(int id) : id(id) {
+		for (int i = 0; i < 3; i++) {
+			flip_x[i] = 0;
+			flip_y[i] = 0;
+			offset_x[i] = 0;
+			multiply_x[i] = 0;
+		}
+	}
+	int id;
+	float flip_y[3];
+	float flip_x[3];
+	float offset_x[3];
+	float multiply_x[3];
+};
 
 struct GenerateTerrainUniform {
 	glm::vec2 resolution;
@@ -97,6 +113,8 @@ struct InCellPos {
 	float x, y;
 };
 
+
+
 class TruchetTerrain {
 public:
 	TruchetTerrain() = default;
@@ -151,8 +169,11 @@ private:
 	GLuint generate_canvas_ubo;
 	Shader canvas_shader;
 	ComputeShader generate_canvas_shader;
-	std::vector<int> hex_ids;
+	std::vector<HexagonData> hex_ids;
+	std::vector<int> edges_data;
+	std::string str;
 	uint2 resolution;
 	dim3 block_size;
 	dim3 grid_size;
+	unsigned int quadvao = 0, quadvbo = 0;
 };
