@@ -15,6 +15,11 @@
 #include <math.h>
 #include <glm/glm.hpp>
 
+struct EdgesData {
+	float flip_y;
+	float offset_x;
+};
+
 struct HexagonData {
 	HexagonData(int id) : id(id) {
 		for (int i = 0; i < 3; i++) {
@@ -139,19 +144,14 @@ private:
 	void generateHexIds();
 	void generateLookupEdges();
 	void printBoard();
-	//tests long path when result is false for size (4, 4) should be false because not all cells are filled
-	void setBoardTestCase1();
-	//tests if path covers 100% of the cell for size(4, 4) should give false for (61, 3, 3) and true for (62 and 54, 3, 3) if there is no option of returning to this cell and you are leaving
-	//tests long path when result if true for size(4, 4) should be true because all other cells are filled and this is last path to end 
-	void setBoardTestCase2();
-	//tests if path covers 100% of the board for size(4, 5) path should give false because it cuts connection for part of the board
-	void setBoardTestCase3();
 	
 	Cell size;
 	Cell beggining;
 	Hexagon* board;
 	HexagonEdges* hex_edges;
 	std::map<int, int> entrances;
+	std::map<int, int> entrance_ids;
+	std::vector<int> board_edges_indices;
 	std::map<int, int> path;
 	std::unordered_map<HexagonEdges, int, HexEdgeHash> lookup_edges;
 	std::vector<Cell> cells_path;
@@ -165,15 +165,17 @@ private:
 	Surface<float4> d_canvas;
 	GLuint canvas;
 	GLuint hex_ids_ssbo;
+	GLuint edge_data_ssbo;
 	GenerateTerrainUniform generate_canvas_uniform;
 	GLuint generate_canvas_ubo;
 	Shader canvas_shader;
 	ComputeShader generate_canvas_shader;
 	std::vector<HexagonData> hex_ids;
-	std::vector<int> edges_data;
+	std::vector<EdgesData> edges_data;
 	std::string str;
 	uint2 resolution;
 	dim3 block_size;
 	dim3 grid_size;
+	float length;
 	unsigned int quadvao = 0, quadvbo = 0;
 };

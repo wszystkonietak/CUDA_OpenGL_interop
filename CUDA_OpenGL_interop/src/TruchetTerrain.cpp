@@ -49,6 +49,13 @@ void TruchetTerrain::setup(std::string&& shaders_path)
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 
+	glGenBuffers(1, &edge_data_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, edge_data_ssbo);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(EdgesData) * edges_data.size(), &edges_data[0], GL_DYNAMIC_COPY);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, edge_data_ssbo);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+
 	generate_canvas_uniform.resolution = glm::vec2(resolution.x, resolution.y);
 	generate_canvas_uniform.board_size = glm::vec2(size.x, size.y);
 
@@ -168,7 +175,8 @@ void TruchetTerrain::generateBoard()
 	}
 	int edges_size_2 = 0;
 	int board_edges_size = size.x * 4 + size.y * 4 - 2;
-	int* board_edges_indices = new int[board_edges_size];
+	
+	board_edges_indices.resize(board_edges_size);
 	const int top_offset = 0;
 	const int right_offset = size.x * 2;
 	const int bottom_offset = size.x * 2 + size.y * 2 - 1;
@@ -178,7 +186,11 @@ void TruchetTerrain::generateBoard()
 		bottom_count = size.x * 2 - 1,
 		left_count = size.y * 2 - 2,
 		right_count = 0;
-
+	
+	int edges_left_offset = size.x;
+	int edges_right_offset = size.x + size.y + size.x - 1 + size.y - 1;
+	int edges_bottom_offset = size.x + size.y + size.x - 2;
+	int edges_top_offset = 0;
 	for (int i = 0; i < edges_size; i++) {
 		//top row
 		if (i < edge_row) {
@@ -237,6 +249,7 @@ void TruchetTerrain::generateBoard()
 	//only for beggining
 	board[0].entrances++;
 	for (int i = 0; i < board_edges_size; i++) {
+		entrance_ids.insert(std::make_pair(board_edges_indices[i], i/2));
 		if (i % 2) {
 			entrances[board_edges_indices[i]] = board_edges_indices[i - 1];
 		}
@@ -253,9 +266,6 @@ void TruchetTerrain::generateBoard()
 			board[c1.y * size.x + c1.x].entrances++;
 		}
 	}
-	delete[] board_edges_indices;
-	//generateCellsIndices();
-	//setBoardTestCase3();
 }
 
 std::vector<Cell> TruchetTerrain::getCellsFromEdgeId(int id)
@@ -352,7 +362,6 @@ std::vector<Cell> TruchetTerrain::getCellsFromEdgeId(int id)
 
 		}
 	}
-	//printVector(result);
 	return result;
 }
 
@@ -618,28 +627,6 @@ void TruchetTerrain::addPathToBoard(int edge1, int edge2, Cell cell)
 
 void TruchetTerrain::generateHexIds()
 {
-	/*int it = 0;
-	for (auto pair : path) {
-		int first_edge = pair.first;
-		int second_edge = pair.second;
-		Cell cell = cells_path[it];
-		for (int i = 0; i < 3; i++) {
-			if (hex_ids[cell.y * size.x + cell.x].edges[i] == INT_MAX) {
-				if (first_edge < second_edge) {
-					hex_ids[cell.y * size.x + cell.x].edges[i].x = first_edge;
-					hex_ids[cell.y * size.x + cell.x].edges[i].y = second_edge;
-				}
-				else {
-					hex_ids[cell.y * size.x + cell.x].edges[i].x = first_edge;
-					hex_ids[cell.y * size.x + cell.x].edges[i].y = second_edge;
-				}
-				if (i == 2) {
-					hex_ids[cell.y * size.x + cell.x].generate_id();
-				}
-			}
-		}
-		it++;
-	}*/
 	for (int y = 0; y < size.y; y++) {
 		for (int x = 0; x < size.x; x++) {
 			if (lookup_edges.contains(hex_edges[y * size.x + x])) {
@@ -653,7 +640,7 @@ void TruchetTerrain::generateHexIds()
 		std::cout << '\n';
 	}
 	int edges_data_size = size.x + size.y + (size.x - 1) + size.y;
-	edges_data.resize(edges_data_size, 0);
+	edges_data.resize(edges_data_size);
 	for (int i = 0; i < hex_ids.size(); i++) {
 		hex_ids[i].flip_y[0] = 0;
 		hex_ids[i].flip_y[1] = 0;
@@ -664,13 +651,18 @@ void TruchetTerrain::generateHexIds()
 	int edge1 = 0;
 	int edge2 = 0;
 	int edge_id = 0;
+	int current_edge_id = -1;
 	int prev_edge = -1;
 	int min_edge_id = 100;
 	int it = 0;
 	bool toCenter = false;
 	bool bottomEntry = false;
+	bool wasBottomEntry = false;
 	std::vector<int> edges;
 	std::vector<int> chenge_edge_id = { 0, 1, 5, 2, 4, 3 };
+	std::vector<float> id_to_length = {0, 0.6046, 0.9069, 1., 0.9069, 0.6046 };
+	
+	std::vector<int> edge_ids(cells_path.size());
 	while (it < cells_path.size()) {
 		edges = getEdgesFromCellId(cells_path[it]);
 		for (int i = 0; i < edges.size(); i++) {
@@ -682,36 +674,32 @@ void TruchetTerrain::generateHexIds()
 				edge_id = i;
 			}
 		}
-		//toCenter = false;
 		bottomEntry = edge1 > 2;
+		
 		min_edge_id = std::min(edge1, edge2);
 		edge1 = chenge_edge_id[edge1];
 		edge2 = chenge_edge_id[edge2];
+		current_edge_id = edge2;
 		edge2 = (edge2 + (6 - edge1)) % 6;
 		edge1 = (edge1 + (6 - edge1)) % 6;
+		edge_ids.push_back(edge2);
+		length += id_to_length[edge2];
+
 		if (prev_edge != -1) {
 			if (prev_edge == 3) {
 				if ((bottomEntry && edge2 > 3) || (!bottomEntry && edge2 < 3)) {
 					toCenter = !toCenter;
 				}
 			}
-			else
-			if (edge2 == 3) {
+			else if (edge2 == 3) {
 				if ((prev_edge < 3 && !bottomEntry) || (prev_edge > 2 && bottomEntry)) {
-					toCenter = !toCenter;
-				}
-			} else
-			if (abs(prev_edge - edge2) > 1) {
-				toCenter = !toCenter;
-			}
-			 /*else if (prev_edge == 3) {
-				if ((bottomEntry && edge2 > 3) || (!bottomEntry && edge2 < 3)) {
 					toCenter = !toCenter;
 				}
 			} else if (abs(prev_edge - edge2) > 1) {
 				toCenter = !toCenter;
-			}*/
+			}
 		}
+		
 		HexagonEdges h_edges = hex_edges[cells_path[it].y * size.x + cells_path[it].x];
 		if (lookup_edges[h_edges] == ((0 << 2) | 0x3)) {
 			hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[min_edge_id] = float(toCenter);
@@ -743,28 +731,56 @@ void TruchetTerrain::generateHexIds()
 		if (path.contains(next_edge)) {
 			current = next_edge;
 			next_edge = path[next_edge];
+			prev_edge = edge2;
 		}
 		else {
+			wasBottomEntry = bottomEntry;
 			current = entrances[next_edge];
 			next_edge = path[current];
-			if (cells_path[it].y == 0) {
-				if (edge_id == 2) {
-					edges_data[edges_data_size - 1] = float(toCenter);
-				}
-				else if (edge_id == 3) {
-					edges_data[size.x] = float(toCenter);
+			prev_edge = current_edge_id % 2 ? 1 : 5;
+			edge_ids.push_back(1);
+			length += id_to_length[1];
+			if (getCellsFromEdgeId(current).size() == 1) {
+				length += id_to_length[1];
+			}
+
+			if (edge2 == 3) {	
+				if ((bottomEntry && current_edge_id % 2 == 0) || (!bottomEntry && current_edge_id % 2 == 1)) {
+					edges_data[entrance_ids[current]].flip_y = float(!toCenter);
+					toCenter = !toCenter;
 				}
 				else {
-					edges_data[cells_path[it].x] = float(toCenter);
+					edges_data[entrance_ids[current]].flip_y = float(toCenter);
 				}
-			} else 
-			if (cells_path[it].x == size.x) {
-				
+			}
+			else {
+				if (abs(prev_edge - edge2) > 1) {
+					edges_data[entrance_ids[current]].flip_y = float(!toCenter);
+				}
+				else {
+					edges_data[entrance_ids[current]].flip_y = float(toCenter);
+				}
+				prev_edge = edge2;
 			}
 		}
-		prev_edge = edge2;
 		it++;
 	}
+	/*float offset = 0.;
+	it = 0;
+	for (auto& pair : path) {
+		
+		if (pair.first && entrances.contains(pair.first)) {
+			edges_data[entrance_ids[pair.first]].offset_x = offset;
+			if (getCellsFromEdgeId(current).size() == 1) {
+				offset += edge_ids[it];
+			}
+			else {
+				offset += 2*edge_ids[it];
+			}
+			it++;
+		}
+		it++;
+	}*/
 }
 
 void TruchetTerrain::generateLookupEdges()
@@ -807,202 +823,11 @@ void TruchetTerrain::printBoard() {
 	}
 }
 
-void TruchetTerrain::setBoardTestCase1()
-{
-	for (int y = 0; y < size.y; y++) {
-		for (int x = 0; x < size.x; x++) {
-			if (x == 0 && y == 0) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 1;
-			}
-			if (x == 0 && y == 1) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			if (x == 0 && y == 2) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			if (x == 3 && y == 2) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			if (x == 0 && y == 3) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			if (x == 1 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			if (x == 2 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			if (x == 3 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-		}
-	}
-	printBoard();
-}
-
-void TruchetTerrain::setBoardTestCase2()
-{
-	for (int y = 0; y < size.y; y++) {
-		for (int x = 0; x < size.x; x++) {
-			if (x == 0 && y == 0) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 1;
-			}
-			else if (x == 0 && y == 1) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 0 && y == 2) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			else if (x == 3 && y == 2) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 0 && y == 3) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			else if (x == 1 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 2 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 3 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			else {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].entrances = 0;
-			}
-		}
-	}
-	printBoard();
-}
-
-void TruchetTerrain::setBoardTestCase3()
-{
-	for (int y = 0; y < size.y; y++) {
-		for (int x = 0; x < size.x; x++) {
-			if (x == 0 && y == 0) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 1;
-			}
-			else if (x == 0 && y == 1) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 0 && y == 2) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			else if (x == 3 && y == 2) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 0 && y == 3) {
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			else if (x == 1 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 2 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].entrances -= 4;
-			}
-			else if (x == 3 && y == 3) {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].entrances -= 2;
-			}
-			else if (y == 4) {
-				continue;
-			}
-			else {
-				board[y * size.x + x].edges[0] |= 0x01;
-				board[y * size.x + x].edges[1] |= 0x01;
-				board[y * size.x + x].edges[2] |= 0x01;
-				board[y * size.x + x].edges[3] |= 0x01;
-				board[y * size.x + x].edges[4] |= 0x01;
-				board[y * size.x + x].edges[5] |= 0x01;
-				board[y * size.x + x].entrances = 0;
-			}
-		}
-	}
-	printBoard();
-}
-
 void TruchetTerrain::update()
 {
 	generate_canvas_shader.use();
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, hex_ids_ssbo);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, edge_data_ssbo);
 	glBindBufferBase(GL_UNIFORM_BUFFER, 1, generate_canvas_ubo);
 	glBindImageTexture(2, canvas, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 	glDispatchCompute((resolution.x - 1) / 10 + 1, (resolution.y - 1) / 10 + 1, 1);

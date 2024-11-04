@@ -22,9 +22,19 @@ struct Hexagon {
 	float multiply_x[3];
 };
 
+struct Edge {
+    float flip_y;
+    float offset_x;
+};
+
 layout(std430, binding = 0) buffer HexagonIds
 {
     Hexagon hex_ids[];
+};
+
+layout(std430, binding = 1) buffer Edges
+{
+    Edge edges[];
 };
 
 layout(std140, binding = 1) uniform CanvasUniform
@@ -120,12 +130,12 @@ vec2 edge_circle(vec2 uv, int hex_id, int curve_id, float edge_id, int size) {
     vec2 c = vec2(circlesLookUp[hex_id][curve_id][0], circlesLookUp[hex_id][curve_id][1]);
     float r = circlesLookUp[hex_id][curve_id][2];
     float l = length(uv - c);
-    //float y = abs(((l - r + w) * 0.5/w)) * step(abs(l - r), w);
-    float y = edge_id / float(size) * step(abs(l - r), w);
+    float y = abs(edges[int(edge_id)].flip_y - ((l - r + w) * 0.5/w)) * step(abs(l - r), w);
+    //float y = edge_id / float(size) * step(abs(l - r), w);
     float angle = (atan(uv.x - c.x, uv.y - c.y) + circlesLookUp[hex_id][curve_id][3]);
     angle = mod(angle, 2.0 * PI); 
     angle /= (2.0 * PI); 
-    float x = step(abs(l - r), w) * angle;
+    float x = edges[int(edge_id)].offset_x + step(abs(l - r), w) * angle;
     return vec2(x, y);
 }
 
@@ -137,7 +147,7 @@ vec2 circle(vec2 uv, Hexagon hex, int curve_id) {
     float angle = (atan(uv.x - c.x, uv.y - c.y) + circlesLookUp[hex.id][curve_id][3]);
     angle = mod(angle, 2.0 * PI); 
     angle /= (2.0 * PI); 
-    float x = step(abs(l - r), w) * angle;
+    float x = hex.offset_x[curve_id] + step(abs(l - r), w) * angle;
     return vec2(x, y);
 }
 
@@ -203,7 +213,7 @@ vec4 getHex(vec2 p) {
 
 void main() {
     vec2 u = vec2(0);
-    w*=10;
+    w*=15;
     u.y = gl_GlobalInvocationID.y / 800.;
     u.x = (gl_GlobalInvocationID.x - 50.)/800.;
     vec2 len = vec2((0.5 * board_size.y * R3 + HR3), (board_size.x + 0.5));
@@ -240,8 +250,8 @@ void main() {
     h.w += offset;
     
     vec2 c = vec2(0.);
-//    col = mix(vec3(0.), vec3(1), smoothstep(0., .03, eDist - .5 + .04));    
     if(h.z >= 0. && h.w >= 0. && h.z < board_size.x && h.w < board_size.y) {
+        //col = mix(vec3(0.), vec3(1), smoothstep(0., .03, eDist - .5 + .04));    
         
         Hexagon data = hex_ids[int(h.w * board_size.x + h.z)];
         
@@ -254,7 +264,7 @@ void main() {
             c += line(vec2(0.25, IR3 * 0.75), vec2(-0.25, -IR3 * 0.75), h.xy, data, 1);  
             c += line(vec2(-0.5, 0.), vec2(0.5, 0.), h.xy, data, 2);
         }
-        col += vec3(0,c.y, 0);
+        col += vec3(0, c.y, 0);
     } else {
         float id1 = 100;
         float id2 = 100;
@@ -293,16 +303,16 @@ void main() {
                 }
             }
         }
-        if(c.y == 14./edges_size) {
+        if(c.y == 4./edges_size) {
             c.y=1.0;
         } else {
-            c.y = 0.;
+            //c.y = 0.;
         }
         col += vec3(0, c.y, 0);
     }
     
     if(abs(uv.x - 1.) < 0.005 || abs(uv.x) < 0.005) {
-        col = vec3(0.3, 0.4, 0.5);
+        //col = vec3(0.3, 0.4, 0.5);
     } 
     imageStore(imgOutput, ivec2(gl_GlobalInvocationID.xy), vec4(col, 1));
 }
