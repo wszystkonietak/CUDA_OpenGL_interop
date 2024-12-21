@@ -19,8 +19,8 @@ void TruchetTerrain::setup(std::string&& shaders_path)
 	str = shaders_path;
 	canvas_shader = Shader(shaders_path + "/canvas.vert", shaders_path + "/canvas.frag");
 	generate_canvas_shader = ComputeShader(shaders_path + "/Compute/generateTerrain.comp");
-	size.x = 4;
-	size.y = 4;
+	size.x = 3;
+	size.y = 3;
 	generateLookupEdges();
 	edges_size = (size.y - 1) * ((size.x * 2 + 1) + (size.x + 1)) + (size.x + 1) + 2 * (size.x * 2);
 	edge_row = size.x * 2;
@@ -645,6 +645,9 @@ void TruchetTerrain::generateHexIds()
 		hex_ids[i].flip_y[0] = 0;
 		hex_ids[i].flip_y[1] = 0;
 		hex_ids[i].flip_y[2] = 0;
+		hex_ids[i].offset_x[0] = 0.5;
+		hex_ids[i].offset_x[1] = 0.5;
+		hex_ids[i].offset_x[2] = 0.5;
 	}
 	int next_edge = path[0];
 	int current = 0;
@@ -683,8 +686,8 @@ void TruchetTerrain::generateHexIds()
 		edge2 = (edge2 + (6 - edge1)) % 6;
 		edge1 = (edge1 + (6 - edge1)) % 6;
 		edge_ids.push_back(edge2);
-		length += id_to_length[edge2];
 
+		
 		if (prev_edge != -1) {
 			if (prev_edge == 3) {
 				if ((bottomEntry && edge2 > 3) || (!bottomEntry && edge2 < 3)) {
@@ -699,35 +702,45 @@ void TruchetTerrain::generateHexIds()
 				toCenter = !toCenter;
 			}
 		}
-		
-		HexagonEdges h_edges = hex_edges[cells_path[it].y * size.x + cells_path[it].x];
+		int h_cell_id = cells_path[it].y * size.x + cells_path[it].x;
+		int h_edge_id = 0;
+		HexagonEdges h_edges = hex_edges[h_cell_id];
 		if (lookup_edges[h_edges] == ((0 << 2) | 0x3)) {
-			hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[min_edge_id] = float(toCenter);
+			h_edge_id = min_edge_id;
+			//hex_ids[h_cell_id].flip_y[min_edge_id] = toCenter;
 		}
 		else {
 			if (edge2 == 3) {
-				hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[0] = float(toCenter);
+				h_edge_id = 0;
+				//hex_ids[h_cell_id].flip_y[0] = toCenter;
 			}
-			else if ((lookup_edges[hex_edges[cells_path[it].y * size.x + cells_path[it].x]] & 0b11) == 1) {
+			else if ((lookup_edges[h_edges] & 0b11) == 1) {
 				if (h_edges.edges[0].x == min_edge_id) {
-					hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[1] = float(toCenter);
+					h_edge_id = 1;
+					//hex_ids[h_cell_id].flip_y[1] = toCenter;
 				}
 				else if ((h_edges.edges[1].x == min_edge_id) && (h_edges.edges[0].x + h_edges.edges[0].y) == 5) {
-					hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[1] = float(toCenter);
+					h_edge_id = 1;
+					//hex_ids[h_cell_id].flip_y[1] = toCenter;
 				}
 				else {
-					hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[2] = float(toCenter);
+					h_edge_id = 2;
+					//hex_ids[h_cell_id].flip_y[2] = toCenter;
 				}
 			}
 			else {
 				for (int i = 0; i < 3; i++) {
-					if (min_edge_id == hex_edges[cells_path[it].y * size.x + cells_path[it].x].edges[i].x) {
-						hex_ids[cells_path[it].y * size.x + cells_path[it].x].flip_y[i] = float(toCenter);
+					if (min_edge_id == h_edges.edges[i].x) {
+						h_edge_id = i;
+						//hex_ids[h_cell_id].flip_y[i] = toCenter;
 					}
 				}
 			}
 		}
-
+		hex_ids[h_cell_id].flip_y[h_edge_id] = toCenter;
+		//tylko to zmienione
+		hex_ids[h_cell_id].offset_x[h_edge_id] = length;
+		length += id_to_length[edge2];
 		if (path.contains(next_edge)) {
 			current = next_edge;
 			next_edge = path[next_edge];
@@ -739,6 +752,7 @@ void TruchetTerrain::generateHexIds()
 			next_edge = path[current];
 			prev_edge = current_edge_id % 2 ? 1 : 5;
 			edge_ids.push_back(1);
+			edges_data[entrance_ids[current]].offset_x = length;
 			length += id_to_length[1];
 			if (getCellsFromEdgeId(current).size() == 1) {
 				length += id_to_length[1];
@@ -746,41 +760,30 @@ void TruchetTerrain::generateHexIds()
 
 			if (edge2 == 3) {	
 				if ((bottomEntry && current_edge_id % 2 == 0) || (!bottomEntry && current_edge_id % 2 == 1)) {
-					edges_data[entrance_ids[current]].flip_y = float(!toCenter);
 					toCenter = !toCenter;
 				}
-				else {
-					edges_data[entrance_ids[current]].flip_y = float(toCenter);
-				}
+				edges_data[entrance_ids[current]].flip_y = toCenter;
 			}
 			else {
 				if (abs(prev_edge - edge2) > 1) {
-					edges_data[entrance_ids[current]].flip_y = float(!toCenter);
+					edges_data[entrance_ids[current]].flip_y = !toCenter;
 				}
 				else {
-					edges_data[entrance_ids[current]].flip_y = float(toCenter);
+					edges_data[entrance_ids[current]].flip_y = toCenter;
 				}
 				prev_edge = edge2;
 			}
 		}
 		it++;
+	}	
+	for (int i = 0; i < edges_data.size(); i++) {
+		edges_data[i].offset_x /= length;
 	}
-	/*float offset = 0.;
-	it = 0;
-	for (auto& pair : path) {
-		
-		if (pair.first && entrances.contains(pair.first)) {
-			edges_data[entrance_ids[pair.first]].offset_x = offset;
-			if (getCellsFromEdgeId(current).size() == 1) {
-				offset += edge_ids[it];
-			}
-			else {
-				offset += 2*edge_ids[it];
-			}
-			it++;
+	for (int i = 0; i < hex_ids.size(); i++) {
+		for (int j = 0; j < 3; j++) {
+			hex_ids[i].offset_x[j] /= length;
 		}
-		it++;
-	}*/
+	}
 }
 
 void TruchetTerrain::generateLookupEdges()

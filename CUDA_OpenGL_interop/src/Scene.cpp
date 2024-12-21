@@ -38,16 +38,18 @@ void Scene::updateMeshes()
 	/*for (auto& softBody : softBodies) {
 		softBody.simulate();
 	}
-	for (auto& particleSystem : particles) {
-		particleSystem.update();
-	}
+	
 	for (auto& canvas : canvases) {
 		canvas.update();
+	}
+	*/
+	terrain.update();
+	/*for (auto& particleSystem : particles) {
+		particleSystem.update();
 	}
 	for (auto& fluid : fluids) {
 		fluid.update();
 	}*/
-	//terrain.update();
 }
 
 void Scene::reloadShaders()
@@ -65,11 +67,13 @@ void Scene::render()
 	for (auto& softBody : softBodies) {
 		softBody.draw(shaders[s_SoftBody], points);
 	}
-	for (auto& particleSystem : particles) {
-		particleSystem.draw(shaders[s_Particles]);
-	}
+	
 	for (auto& canvas : canvases) {
 		canvas.draw();
+	}
+	*/
+	/*for (auto& particleSystem : particles) {
+		particleSystem.draw(shaders[s_Particles]);
 	}
 	for (auto& fluid : fluids) {
 		fluid.draw();
