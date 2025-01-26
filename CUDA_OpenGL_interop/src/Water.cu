@@ -222,7 +222,7 @@ __global__ void grid_to_particles(float2* grid_velocities, Particle* particles, 
 void FlipFluid::init(std::string&& shaders_path)
 {
 	cell_size = 0.02;
-	particle_radius = 0.0033;
+	particle_radius = 0.0063;
 	s_textures = Shader(shaders_path + "/canvas.vert", shaders_path + "/canvas.frag");
 	s_particles = Shader(shaders_path + "/particles.vert", shaders_path + "/particles.frag");
 	s_particles.use();

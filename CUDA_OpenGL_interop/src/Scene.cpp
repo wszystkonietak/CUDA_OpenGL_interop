@@ -44,12 +44,12 @@ void Scene::updateMeshes()
 	}
 	*/
 	terrain.update();
-	/*for (auto& particleSystem : particles) {
+	for (auto& particleSystem : particles) {
 		particleSystem.update();
 	}
 	for (auto& fluid : fluids) {
 		fluid.update();
-	}*/
+	}
 }
 
 void Scene::reloadShaders()

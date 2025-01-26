@@ -252,7 +252,7 @@ void main() {
     h.w += offset;
     
     vec2 c = vec2(0.);
-    col = mix(vec3(0.), vec3(1), smoothstep(0., .03, eDist - .5 + .04));    
+    //col = mix(vec3(0.), vec3(1), smoothstep(0., .03, eDist - .5 + .04));    
     if(h.z >= 0. && h.w >= 0. && h.z < board_size.x && h.w < board_size.y) {
         
         Hexagon data = hex_ids[int(h.w * board_size.x + h.z)];
@@ -266,7 +266,7 @@ void main() {
             c += line(vec2(0.25, IR3 * 0.75), vec2(-0.25, -IR3 * 0.75), h.xy, data, 1);  
             c += line(vec2(-0.5, 0.), vec2(0.5, 0.), h.xy, data, 2);
         }
-        col += vec3(c.y, 0, 0);
+        col += vec3(0, c.x, 0);
     } else {
         float id1 = 100;
         float id2 = 100;
@@ -313,9 +313,11 @@ void main() {
         } else {
             //c.y = 0.;
         }
-        col += vec3(c.y, 0, 0);
+        col += vec3(0, c.x, 0);
     }
-    
+    if(col.y < 0.5 && col.y != 0) {
+        col = vec3(1);
+    }
     if(abs(uv.x - 1.) < 0.005 || abs(uv.x) < 0.005) {
         //col = vec3(0.3, 0.4, 0.5);
     } 
