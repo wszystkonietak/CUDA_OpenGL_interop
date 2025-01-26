@@ -18,6 +18,7 @@
 struct EdgesData {
 	float flip_y;
 	float offset_x;
+	float multiply_x;
 };
 
 struct HexagonData {

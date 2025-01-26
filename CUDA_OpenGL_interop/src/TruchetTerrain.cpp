@@ -44,14 +44,14 @@ void TruchetTerrain::setup(std::string&& shaders_path)
 
 	glGenBuffers(1, &hex_ids_ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, hex_ids_ssbo);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(HexagonData) * hex_ids.size(), &hex_ids[0], GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(HexagonData) * hex_ids.size(), hex_ids.data(), GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, hex_ids_ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 
 	glGenBuffers(1, &edge_data_ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, edge_data_ssbo);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(EdgesData) * edges_data.size(), &edges_data[0], GL_DYNAMIC_COPY);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(EdgesData) * edges_data.size(), edges_data.data(), GL_DYNAMIC_COPY);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, edge_data_ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
@@ -665,7 +665,8 @@ void TruchetTerrain::generateHexIds()
 	std::vector<int> chenge_edge_id = { 0, 1, 5, 2, 4, 3 };
 	std::vector<float> id_to_length = {0, 0.6046, 0.9069, 1., 0.9069, 0.6046 };
 	
-	std::vector<int> edge_ids(cells_path.size());
+	std::vector<std::vector<int>> edge_ids(cells_path.size(), std::vector<int>(3));
+	length = 0.;
 	while (it < cells_path.size()) {
 		edges = getEdgesFromCellId(cells_path[it]);
 		for (int i = 0; i < edges.size(); i++) {
@@ -685,7 +686,7 @@ void TruchetTerrain::generateHexIds()
 		current_edge_id = edge2;
 		edge2 = (edge2 + (6 - edge1)) % 6;
 		edge1 = (edge1 + (6 - edge1)) % 6;
-		edge_ids.push_back(edge2);
+		//edge_ids.push_back(edge2);
 
 		
 		if (prev_edge != -1) {
@@ -740,6 +741,7 @@ void TruchetTerrain::generateHexIds()
 		hex_ids[h_cell_id].flip_y[h_edge_id] = toCenter;
 		//tylko to zmienione
 		hex_ids[h_cell_id].offset_x[h_edge_id] = length;
+		edge_ids[h_cell_id][h_edge_id] = edge2;
 		length += id_to_length[edge2];
 		if (path.contains(next_edge)) {
 			current = next_edge;
@@ -751,7 +753,7 @@ void TruchetTerrain::generateHexIds()
 			current = entrances[next_edge];
 			next_edge = path[current];
 			prev_edge = current_edge_id % 2 ? 1 : 5;
-			edge_ids.push_back(1);
+			//edge_ids.push_back(1);
 			edges_data[entrance_ids[current]].offset_x = length;
 			length += id_to_length[1];
 			if (getCellsFromEdgeId(current).size() == 1) {
@@ -778,10 +780,18 @@ void TruchetTerrain::generateHexIds()
 	}	
 	for (int i = 0; i < edges_data.size(); i++) {
 		edges_data[i].offset_x /= length;
+		
 	}
 	for (int i = 0; i < hex_ids.size(); i++) {
 		for (int j = 0; j < 3; j++) {
 			hex_ids[i].offset_x[j] /= length;
+			hex_ids[i].multiply_x[j] = (id_to_length[edge_ids[i][j]] / length);
+			if (edge_ids[i][j] == 1 || edge_ids[i][j] == 5) {
+				hex_ids[i].multiply_x[j] *= 3.;
+			}
+			else if (edge_ids[i][j] == 2 || edge_ids[i][j] == 4) {
+				hex_ids[i].multiply_x[j] *= 6.;
+			}
 		}
 	}
 }
