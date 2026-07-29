@@ -49,7 +49,7 @@ void Project::run()
 void Project::frame_update()
 {
 	Time::update_time();
-	printf("%f\n", Time::frames_per_second);
+	//printf("%f\n", Time::frames_per_second);
 	scene.updateMeshes();
 }
 

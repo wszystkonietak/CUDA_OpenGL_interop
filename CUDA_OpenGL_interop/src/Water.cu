@@ -30,120 +30,91 @@ __global__ void clear_grid(cudaSurfaceObject_t grid, uint2 resolution)
 	}
 }
 
-__global__ void simulate_particles(cudaSurfaceObject_t grid, Particle* particles, 
-	float2* grid_velocities, float* sum_of_weights, ushort2* busy_cells, unsigned int* busy_cells_size, 
-	unsigned int particles_size, uint2 resolution, unsigned int grid_size, float4 boundings, float cell_size, 
-	float delta_time) 
+__global__ void simulate_particles(cudaSurfaceObject_t grid, Particle* particles,
+	float2* grid_velocities, float2* sum_of_weights, ushort2* busy_cells, unsigned int* busy_cells_size,
+	unsigned int particles_size, uint2 resolution, unsigned int grid_size, float4 boundings, float cell_size,
+	float delta_time)
 {
-	extern __shared__ float2 s[];
-	float2* s_grid_velocities = s;
-	float* s_sum_of_weights = (float*)&s_grid_velocities[grid_size];
-	unsigned short* s_busy_cells = (unsigned short*)&s_sum_of_weights[grid_size];
-	
 	int g_id = blockIdx.x * blockDim.x + threadIdx.x;
-	int t_id = threadIdx.x;
-	float2 vel, pos, delta;
-	uint2 cell = make_uint2(0, 0), g_cell;
-	float4 weights, prev_weights;
+	if (g_id >= particles_size) return;
 
-	for (int i = t_id; i < resolution.x * resolution.y; i += blockDim.x) {
-		s_grid_velocities[i].x = 0;
-		s_grid_velocities[i].y = 0;
-		s_sum_of_weights[i] = 0;
-		s_busy_cells[i] = 0;
-	}
-	__syncthreads();
-	while (g_id < particles_size) {
-		vel = particles[g_id].velocity;
-		pos = particles[g_id].position;
-		vel.y -= 3.81f * delta_time;
-		
-		pos.x += vel.x * delta_time;
-		pos.y += vel.y * delta_time;
+	float2 vel = particles[g_id].velocity;
+	float2 pos = particles[g_id].position;
 
-		if (pos.x <= boundings.x) {
-			vel.x *= -0.8f;
-			pos.x = boundings.x;
-		}
-		if (pos.x >= boundings.y) {
-			vel.x *= -0.8f;
-			pos.x = boundings.y;
-		}
+	vel.y -= 3.81f * delta_time; 
+	pos.x += vel.x * delta_time;
+	pos.y += vel.y * delta_time;
 
-		if (pos.y <= boundings.z) {
-			vel.y *= -0.8f;
-			pos.y = boundings.z;
-		}
-		if (pos.y >= boundings.w) {
-			vel.y *= -0.8f;
-			pos.y = boundings.w;
-		}
+	if (pos.x <= boundings.x) { vel.x *= -0.8f; pos.x = boundings.x; }
+	if (pos.x >= boundings.y) { vel.x *= -0.8f; pos.x = boundings.y; }
+	if (pos.y <= boundings.z) { vel.y *= -0.8f; pos.y = boundings.z; }
+	if (pos.y >= boundings.w) { vel.y *= -0.8f; pos.y = boundings.w; }
 
-		particles[g_id].position = pos;
-		cell = make_uint2(pos.x / cell_size, pos.y / cell_size);
+	particles[g_id].position = pos;
 
-		s_busy_cells[cell.x * resolution.y + cell.y]++;
+	int c_x = max(0, min((int)(pos.x / cell_size), (int)resolution.x - 1));
+	int c_y = max(0, min((int)(pos.y / cell_size), (int)resolution.y - 1));
+	surf2Dwrite(1.0f, grid, c_x * sizeof(float), c_y);
 
-		delta.x = (pos.x - cell_size * cell.x) / cell_size;
-		delta.y = (pos.y - cell_size * cell.y) / cell_size;
+	float px_u = pos.x / cell_size;
+	float py_u = (pos.y / cell_size) - 0.5f;
+	int cx_u = max(0, min((int)px_u, (int)resolution.x - 2));
+	int cy_u = max(0, min((int)py_u, (int)resolution.y - 2));
+	float tx_u = px_u - cx_u;
+	float ty_u = py_u - cy_u;
 
-		weights.x = (1 - delta.x) * (1 - delta.y);
-		weights.y = delta.x * (1 - delta.y);
-		weights.z = (delta.x) * (delta.y);
-		weights.w = (1 - delta.x) * (delta.y);
-		
-		atomicAdd(&s_grid_velocities[cell.x * resolution.y + cell.y].x, weights.x * vel.x);
-		atomicAdd(&s_grid_velocities[cell.x * resolution.y + cell.y].y, weights.x * vel.y);
+	float4 w_u = make_float4(
+		(1 - tx_u) * (1 - ty_u), tx_u * (1 - ty_u),
+		tx_u * ty_u, (1 - tx_u) * ty_u
+	);
 
-		atomicAdd(&s_grid_velocities[(cell.x + 1) * resolution.y + cell.y].x, weights.y * vel.x);
-		atomicAdd(&s_grid_velocities[(cell.x + 1) * resolution.y + cell.y].y, weights.y * vel.y);
+	atomicAdd(&grid_velocities[cx_u * resolution.y + cy_u].x, w_u.x * vel.x);
+	atomicAdd(&grid_velocities[(cx_u + 1) * resolution.y + cy_u].x, w_u.y * vel.x);
+	atomicAdd(&grid_velocities[(cx_u + 1) * resolution.y + cy_u + 1].x, w_u.z * vel.x);
+	atomicAdd(&grid_velocities[cx_u * resolution.y + cy_u + 1].x, w_u.w * vel.x);
 
-		atomicAdd(&s_grid_velocities[(cell.x + 1) * resolution.y + cell.y + 1].x, weights.z * vel.x);
-		atomicAdd(&s_grid_velocities[(cell.x + 1) * resolution.y + cell.y + 1].y, weights.z * vel.y);
+	atomicAdd(&sum_of_weights[cx_u * resolution.y + cy_u].x, w_u.x);
+	atomicAdd(&sum_of_weights[(cx_u + 1) * resolution.y + cy_u].x, w_u.y);
+	atomicAdd(&sum_of_weights[(cx_u + 1) * resolution.y + cy_u + 1].x, w_u.z);
+	atomicAdd(&sum_of_weights[cx_u * resolution.y + cy_u + 1].x, w_u.w);
 
-		atomicAdd(&s_grid_velocities[cell.x * resolution.y + cell.y + 1].x, weights.w * vel.x);
-		atomicAdd(&s_grid_velocities[cell.x * resolution.y + cell.y + 1].y, weights.w * vel.y);
+	float px_v = (pos.x / cell_size) - 0.5f;
+	float py_v = pos.y / cell_size;
+	int cx_v = max(0, min((int)px_v, (int)resolution.x - 2));
+	int cy_v = max(0, min((int)py_v, (int)resolution.y - 2));
+	float tx_v = px_v - cx_v;
+	float ty_v = py_v - cy_v;
 
-		atomicAdd(&s_sum_of_weights[cell.x * resolution.y + cell.y], weights.x);
-		atomicAdd(&s_sum_of_weights[(cell.x + 1) * resolution.y + cell.y], weights.y);
-		atomicAdd(&s_sum_of_weights[(cell.x + 1) * resolution.y + cell.y + 1], weights.z);
-		atomicAdd(&s_sum_of_weights[cell.x * resolution.y + cell.y + 1], weights.w);		
+	float4 w_v = make_float4(
+		(1 - tx_v) * (1 - ty_v), tx_v * (1 - ty_v),
+		tx_v * ty_v, (1 - tx_v) * ty_v
+	);
 
-		g_id += blockDim.x * gridDim.x;
-	}
-	__syncthreads();
+	atomicAdd(&grid_velocities[cx_v * resolution.y + cy_v].y, w_v.x * vel.y);
+	atomicAdd(&grid_velocities[(cx_v + 1) * resolution.y + cy_v].y, w_v.y * vel.y);
+	atomicAdd(&grid_velocities[(cx_v + 1) * resolution.y + cy_v + 1].y, w_v.z * vel.y);
+	atomicAdd(&grid_velocities[cx_v * resolution.y + cy_v + 1].y, w_v.w * vel.y);
 
-	g_cell.x = t_id / resolution.x;
-	g_cell.y = t_id % resolution.y;
-
-	while(g_cell.x < resolution.x)
-	{
-		atomicAdd(&sum_of_weights[t_id], s_sum_of_weights[t_id]);
-		atomicAdd(&grid_velocities[t_id].x, s_grid_velocities[t_id].x);
-		atomicAdd(&grid_velocities[t_id].y, s_grid_velocities[t_id].y);
-		if (s_busy_cells[t_id])
-			surf2Dwrite(1.0f, grid, g_cell.x * sizeof(float), g_cell.y);
-
-		t_id += blockDim.x;
-		g_cell.x = t_id / resolution.x;
-		g_cell.y = t_id % resolution.y;
-	}
+	atomicAdd(&sum_of_weights[cx_v * resolution.y + cy_v].y, w_v.x);
+	atomicAdd(&sum_of_weights[(cx_v + 1) * resolution.y + cy_v].y, w_v.y);
+	atomicAdd(&sum_of_weights[(cx_v + 1) * resolution.y + cy_v + 1].y, w_v.z);
+	atomicAdd(&sum_of_weights[cx_v * resolution.y + cy_v + 1].y, w_v.w);
 }
 
-__global__ void update_velocities(float2* grid_velocities, float* sum_of_weights, ushort2* busy_cells, unsigned int* busy_cells_size, uint2 resolution)
+__global__ void update_velocities(float2* grid_velocities, float2* sum_of_weights, ushort2* busy_cells, unsigned int* busy_cells_size, uint2 resolution)
 {
 	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-	float sum;
-	float2 vel;
+
 	if (x < resolution.x && y < resolution.y) {
-		sum = sum_of_weights[x * resolution.y + y];
-		if (sum > 0.0) {
-			vel = grid_velocities[x * resolution.y + y];
-			vel.x /= sum;
-			vel.y /= sum;
-			grid_velocities[x * resolution.y + y] = vel;
-		}
+		int idx = x * resolution.y + y;
+		float2 sum = sum_of_weights[idx];
+		float2 vel = grid_velocities[idx];
+
+		if (sum.x > 0.0f) vel.x /= sum.x;
+		if (sum.y > 0.0f) vel.y /= sum.y;
+
+		grid_velocities[idx] = vel;
 	}
 }
 
@@ -182,42 +153,37 @@ __global__ void calculate_divergence(cudaSurfaceObject_t grid, cudaSurfaceObject
 __global__ void grid_to_particles(float2* grid_velocities, Particle* particles, float cell_size, int num_particles, uint2 resolution)
 {
 	int g_id = blockIdx.x * blockDim.x + threadIdx.x;
-	float2 vel, pos, delta, vel_current, vel_right_bottom, vel_right_top, vel_left_top;
-	uint2 cell;
-	float4 weights;
+	if (g_id >= num_particles) return;
 
-	while (g_id < num_particles) {
-		pos = particles[g_id].position;
-		cell = make_uint2(pos.x / cell_size, pos.y / cell_size);
+	float2 pos = particles[g_id].position;
 
+	float px_u = pos.x / cell_size;
+	float py_u = (pos.y / cell_size) - 0.5f;
+	int cx_u = max(0, min((int)px_u, (int)resolution.x - 2));
+	int cy_u = max(0, min((int)py_u, (int)resolution.y - 2));
+	float tx_u = px_u - cx_u;
+	float ty_u = py_u - cy_u;
 
-		vel_current = grid_velocities[cell.x * resolution.y + cell.y];
-		vel_right_bottom = grid_velocities[(cell.x + 1) * resolution.y + cell.y];
-		vel_right_top = grid_velocities[(cell.x + 1) * resolution.y + cell.y + 1];
-		vel_left_top = grid_velocities[cell.x * resolution.y + cell.y + 1];
+	float vel_u =
+		(1 - tx_u) * (1 - ty_u) * grid_velocities[cx_u * resolution.y + cy_u].x +
+		tx_u * (1 - ty_u) * grid_velocities[(cx_u + 1) * resolution.y + cy_u].x +
+		tx_u * ty_u * grid_velocities[(cx_u + 1) * resolution.y + cy_u + 1].x +
+		(1 - tx_u) * ty_u * grid_velocities[cx_u * resolution.y + cy_u + 1].x;
 
-		delta.x = (pos.x - cell_size * cell.x) / cell_size;
-		delta.y = (pos.y - cell_size * cell.y) / cell_size;
+	float px_v = (pos.x / cell_size) - 0.5f;
+	float py_v = pos.y / cell_size;
+	int cx_v = max(0, min((int)px_v, (int)resolution.x - 2));
+	int cy_v = max(0, min((int)py_v, (int)resolution.y - 2));
+	float tx_v = px_v - cx_v;
+	float ty_v = py_v - cy_v;
 
-		weights.x = (1 - delta.x) * (1 - delta.y);
-		weights.y = delta.x * (1 - delta.y);
-		weights.z = (delta.x) * (delta.y);
-		weights.w = (1 - delta.x) * (delta.y);
+	float vel_v =
+		(1 - tx_v) * (1 - ty_v) * grid_velocities[cx_v * resolution.y + cy_v].y +
+		tx_v * (1 - ty_v) * grid_velocities[(cx_v + 1) * resolution.y + cy_v].y +
+		tx_v * ty_v * grid_velocities[(cx_v + 1) * resolution.y + cy_v + 1].y +
+		(1 - tx_v) * ty_v * grid_velocities[cx_v * resolution.y + cy_v + 1].y;
 
-		vel.x = weights.x * vel_current.x;
-		vel.x += weights.y * vel_right_bottom.x;
-		vel.x += weights.z * vel_right_top.x;
-		vel.x += weights.w * vel_left_top.x;
-
-		vel.y = weights.x * vel_current.y;
-		vel.y += weights.y * vel_right_bottom.y;
-		vel.y += weights.z * vel_right_top.y;
-		vel.y += weights.w * vel_left_top.y;
-
-		particles[g_id].velocity = vel;
-
-		g_id += blockDim.x * gridDim.x;
-	}
+	particles[g_id].velocity = make_float2(vel_u, vel_v);
 }
 
 void FlipFluid::init(std::string&& shaders_path)
@@ -267,7 +233,7 @@ void FlipFluid::init(std::string&& shaders_path)
 	cudaMalloc(&d_busy_cells_size, sizeof(unsigned int));
 
 	cudaMalloc(&d_grid_velocities, sizeof(float2) * mem_size);
-	cudaMalloc(&d_sum_of_weights, sizeof(float) * mem_size);
+	cudaMalloc(&d_sum_of_weights, sizeof(float2) * mem_size);
 	
 
 	solid_cells = Surface<float2>(id_solid_cells, GL_TEXTURE_2D, resolution);
@@ -324,6 +290,28 @@ void FlipFluid::init(std::string&& shaders_path)
 		sizeof(float) * mem_size + sizeof(unsigned short) * mem_size;
 }
 
+
+__global__ void enforce_boundaries(float2* grid_velocities, uint2 resolution)
+{
+	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (i < resolution.y) {
+		grid_velocities[1 * resolution.y + i].x = 0.0f;                               
+		grid_velocities[0 * resolution.y + i].y = grid_velocities[1 * resolution.y + i].y;
+
+		grid_velocities[(resolution.x - 1) * resolution.y + i].x = 0.0f;
+		grid_velocities[(resolution.x - 1) * resolution.y + i].y = grid_velocities[(resolution.x - 2) * resolution.y + i].y;
+	}
+
+	if (i < resolution.x) {
+		grid_velocities[i * resolution.y + 1].y = 0.0f;                              
+		grid_velocities[i * resolution.y + 0].x = grid_velocities[i * resolution.y + 1].x;
+		
+		grid_velocities[i * resolution.y + (resolution.y - 1)].y = 0.0f;
+		grid_velocities[i * resolution.y + (resolution.y - 1)].x = grid_velocities[i * resolution.y + (resolution.y - 2)].x;
+	}
+}
+
 void FlipFluid::update()
 {
 	for (int i = 0; i < 5; i++) {
@@ -333,7 +321,7 @@ void FlipFluid::update()
 	cudaMemset(d_busy_cells_size, 0, sizeof(unsigned int));
 
 	cudaMemset(d_grid_velocities, 0, sizeof(float2) * mem_size);
-	cudaMemset(d_sum_of_weights, 0, sizeof(float) * mem_size);
+	cudaMemset(d_sum_of_weights, 0, sizeof(float2) * mem_size);
 	
 	clear_grid << <grid_size, block_size >> > (grid.surface, resolution);
 	
@@ -341,9 +329,11 @@ void FlipFluid::update()
 
 	update_velocities <<<grid_size, block_size >>> (d_grid_velocities, d_sum_of_weights, d_busy_cells, d_busy_cells_size, resolution);
 	
+	enforce_boundaries << <grid_size, block_size >> > (d_grid_velocities, resolution);
 	for (int i = 0; i < 40; i++) {
 		calculate_divergence << <grid_size, block_size >> > (grid.surface, solid_cells.surface, d_grid_velocities, resolution, i);
 	}
+	enforce_boundaries << <grid_size, block_size >> > (d_grid_velocities, resolution);
 
 	grid_to_particles << <p_grid_size, p_block_size >> > (d_grid_velocities, d_particles, cell_size, particles_size, resolution);
 	cudaDeviceSynchronize();
@@ -354,7 +344,7 @@ void FlipFluid::draw()
 	cudaDeviceSynchronize();
 	s_textures.use();
 	
-	unsigned int quadvao = 0, quadvbo = 0;
+	static unsigned int quadvao = 0, quadvbo = 0;
 	if (quadvao == 0) {
 		float quadVertices[] = {
 			// positions  // texture Coords
@@ -378,7 +368,7 @@ void FlipFluid::draw()
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, id_grid);
 	glBindVertexArray(quadvao);
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	//glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
 	s_particles.use();    
 	glBindVertexArray(VAO);

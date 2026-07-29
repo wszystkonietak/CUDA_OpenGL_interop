@@ -30,7 +30,7 @@ public:
 	Particle* d_particles;
 	ushort2* d_busy_cells;
 	float2* d_grid_velocities;
-	float* d_sum_of_weights;
+	float2* d_sum_of_weights;
 	unsigned int* d_busy_cells_size;
 	unsigned int id_solid_cells, id_grid;
 	unsigned int VAO, VBO;

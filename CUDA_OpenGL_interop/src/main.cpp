@@ -5,7 +5,7 @@
 
 int main()
 {
-	std::string path = "wszystkonietak";
+	std::string path = "C:\\Users\\Igor\\Desktop\\CUDA_OpenGL_interop\\CUDA_OpenGL_interop\\wszystkonietak";
 	Project project(path);
 	Callbacks callbacks(project);
 	project.run();
